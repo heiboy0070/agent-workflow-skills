@@ -1,0 +1,4 @@
+interface:
+  display_name: "严谨功能交付"
+  short_description: "Plan verify document and commit risky multi repo features"
+  default_prompt: "按严谨功能交付流程执行这个多仓库功能，创建 worktree/分支，维护追踪文档，SQL 只生成文件，完成测试、review、red-team、接口文档和中文功能提交。"
