@@ -11,6 +11,7 @@ This repository is the canonical source for a small set of delivery, verificatio
 | `rigorous-feature-delivery` | Multi-repository feature delivery workflow with planning, SQL review files, staged verification, documentation, review/red-team steps, and Chinese commit messages. |
 | `rigorous-delivery` | Strict implementation and verification workflow requiring real API evidence, headed UI verification when applicable, independent review, and adversarial red-team checks. |
 | `pre-mortem-design` | Pre-implementation risk analysis for high-risk changes such as authentication, concurrency, durable data mutation, state machines, payments, and external integrations. |
+| `creating-pull-requests` | Pull request creation workflow requiring user-specified base branches, pre-creation PR body confirmation, clean diffs, and evidence-based verification. |
 
 ## Repository Layout
 
@@ -22,6 +23,8 @@ skills/
   rigorous-delivery/
     SKILL.md
   pre-mortem-design/
+    SKILL.md
+  creating-pull-requests/
     SKILL.md
 ```
 
@@ -45,6 +48,7 @@ mkdir -p ~/.codex/skills
 ln -sfn "$PWD/skills/rigorous-feature-delivery" ~/.codex/skills/rigorous-feature-delivery
 ln -sfn "$PWD/skills/rigorous-delivery" ~/.codex/skills/rigorous-delivery
 ln -sfn "$PWD/skills/pre-mortem-design" ~/.codex/skills/pre-mortem-design
+ln -sfn "$PWD/skills/creating-pull-requests" ~/.codex/skills/creating-pull-requests
 ```
 
 For Claude:
@@ -54,6 +58,7 @@ mkdir -p ~/.claude/skills
 ln -sfn "$PWD/skills/rigorous-feature-delivery" ~/.claude/skills/rigorous-feature-delivery
 ln -sfn "$PWD/skills/rigorous-delivery" ~/.claude/skills/rigorous-delivery
 ln -sfn "$PWD/skills/pre-mortem-design" ~/.claude/skills/pre-mortem-design
+ln -sfn "$PWD/skills/creating-pull-requests" ~/.claude/skills/creating-pull-requests
 ```
 
 After installation, update skill contents in this repository. The local agent directories should remain symlinks.
@@ -68,6 +73,7 @@ QUICK_VALIDATE="${QUICK_VALIDATE:-$HOME/.codex/skills/.system/skill-creator/scri
 python3 "$QUICK_VALIDATE" skills/rigorous-feature-delivery
 python3 "$QUICK_VALIDATE" skills/rigorous-delivery
 python3 "$QUICK_VALIDATE" skills/pre-mortem-design
+python3 "$QUICK_VALIDATE" skills/creating-pull-requests
 ```
 
 At minimum, validation should confirm:
