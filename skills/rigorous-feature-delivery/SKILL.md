@@ -14,7 +14,7 @@ Use this as the default chain for issue-driven feature/fix work:
 1. **Plan/design:** Use `pre-mortem-design` before finalizing plans for payments, state machines, auth, durable data, concurrency, or external integrations.
 2. **Scope binding:** Bind the work to one tracker issue by default. One worktree, branch, and PR should map to one issue's acceptance scope unless the user explicitly authorizes a combined branch.
 3. **Implement/verify:** Use this skill plus `rigorous-delivery`; after code is written, `rigorous-delivery` review/red-team gates are mandatory before calling the issue complete.
-4. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure `rigorous-delivery` impact-radius full review (`4b-full`) has run once against the latest pushed commit before asking whether to create a PR. It must cover the current diff and high-coupling upstream/downstream flows, not unrelated repository areas. Do not run it twice unless code changed after the review.
+4. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure the `rigorous-delivery` risk-tiered PR gate has run once against the latest pushed commit before asking whether to create a PR. High-risk changes still require impact-radius full review (`4b-full`); low/medium-risk changes may use one comprehensive impact-radius reviewer plus focused tests. It must cover the current diff and high-coupling upstream/downstream flows, not unrelated repository areas. Do not run it twice unless code changed after the review.
 5. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
 6. **Cleanup:** After the PR exists, clean up worktree directories created for the task so they do not accumulate.
 
@@ -77,10 +77,10 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
 
 8. Review and red-team before completion.
    - Invoke `rigorous-delivery` for this gate; do not replace it with self-review.
-   - Follow `rigorous-delivery` Iron rule 7: dispatch one independent normal reviewer subagent and one independent adversarial red-team subagent.
-   - Code is not "done" until normal review and red-team have both passed, or all findings are fixed/re-verified with evidence.
-   - `superpowers:requesting-code-review` may only supplement the normal review. It does not satisfy the red-team requirement and cannot replace `rigorous-delivery`.
-   - If `rigorous-delivery` is unavailable but `superpowers:requesting-code-review` is available, use it for the normal review and still run a separate adversarial red-team review.
+   - Follow `rigorous-delivery` Iron rule 7: state the risk tier, then run the matching independent review gate. High-risk changes require one independent normal reviewer subagent and one independent adversarial red-team subagent; low/medium-risk changes may use one comprehensive impact-radius reviewer unless the user asks for more.
+   - Code is not "done" until the required risk-tiered review has passed, or all P0-P2 findings are fixed/re-verified with evidence.
+   - `superpowers:requesting-code-review` may only supplement the normal review. It does not satisfy a required high-risk red-team pass and cannot replace `rigorous-delivery`.
+   - If `rigorous-delivery` is unavailable but `superpowers:requesting-code-review` is available, use it for the normal review and still run a separate adversarial red-team review when the change is high-risk.
    - The review must check regressions, missing permission checks, deployment ordering, table-not-found behavior, token/user mismatch, rollback behavior, data-access/performance risk, and untested paths.
    - Fix findings or document residual risks with evidence.
    - If dedicated review/red-team skills or subagents are unavailable, record that limitation in the tracking document and final report; label the result as a local fallback, not as the required independent review.
@@ -91,9 +91,9 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Mention verification or deployment-safety details in commit bodies when useful.
 
 10. Push and PR readiness.
-   - Push only after focused tests, full relevant tests, normal review, red-team, and re-verification are complete.
-   - If you believe the issue is complete after push, ensure `rigorous-delivery` impact-radius full review (`4b-full`) has run against the latest pushed commit and consolidate the findings before asking the user whether to create a PR.
-   - Do not ask "要不要提 PR / 可以提 PR 了吗" until full review has no open P0/P1 and P2/P3 are either fixed or explicitly surfaced to the user for triage.
+   - Push only after focused tests, full relevant tests, required risk-tiered review, and re-verification are complete.
+   - If you believe the issue is complete after push, ensure the `rigorous-delivery` risk-tiered PR gate has run against the latest pushed commit and consolidate the findings before asking the user whether to create a PR.
+   - Do not ask "要不要提 PR / 可以提 PR 了吗" until the required PR gate has no open P0/P1 and P2/P3 are either fixed or explicitly surfaced to the user for triage.
    - Treat this as the single PR-readiness gate. When `creating-pull-requests` runs later, it should verify this gate was already satisfied, not repeat it, unless commits changed after the review.
 
 11. PR and cleanup.
