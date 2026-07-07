@@ -32,12 +32,12 @@ description: "Use when designing or planning a fix/feature in high-risk domains 
 | 维度 | 要回答的问题 | 挂的方式 |
 |---|---|---|
 | **1. 并发/race** | 两个请求/进程/webhook/设备**同时**操作同一资源会怎样？check-then-act 有没有 TOCTOU 窗口？ | 抢座超卖、重复扣款、双开结账 |
-| **2. 幂等** | 同一操作**重复**执行（重试/双击/网络重放/webhook 重复投递）结果一致吗？ | 重复 enrollment、重复退款、重复扣款 |
+| **2. 幂等** | 同一操作**重复**执行（重试/双击/网络重放/webhook 重复投递）结果一致吗？幂等 reservation/lock 是否覆盖 fresh pending、stale pending、succeeded、provider failure、进程崩溃恢复？ | 重复 enrollment、重复退款、重复扣款、同一 key 永久卡死 |
 | **3. 原子性/CAS** | 状态转换是 `UPDATE ... WHERE status='X'`（条件更新）还是 read-then-write？跨进程的竞态有没有 DB CAS/锁兜底？ | 丢失更新、覆盖了他人的转换 |
 | **4. 状态机完备** | 所有状态、所有转换（含**失败/超时/取消/补偿/回滚**）都定义了？有死状态/不可达/卡死状态吗？ | 卡 pending 永不流转（见反面例子） |
 | **5. 源真相对齐 ⭐** | 本地状态 vs 外部系统（Stripe/第三方/DB）**谁是 source of truth**？本地状态会不会**滞后**外部？**仅凭本地状态"作废/取消/判定已死"安全吗？** | 误取消"已付款但本地未翻转"的单（见反面例子） |
-| **6. 失败兜底/对账** | 支付成功但履约失败？webhook 丢失/延迟/乱序？钱或数据**会不会丢**？有没有 `requires_review`/对账/重放兜底？ | 客户被扣款却没拿到货、静默丢支付 |
-| **7. 安全** | 鉴权/越权/IDOR/注入/敏感数据/重放？destructive 操作校验归属了吗？ | 越权取消他人订单、数据泄漏 |
+| **6. 失败兜底/对账** | 支付成功但履约失败？webhook 丢失/延迟/乱序？钱或数据**会不会丢**？有没有 `requires_review`/对账/重放兜底？stale pending 是安全恢复、人工复核，还是永久阻塞/粗暴释放？ | 客户被扣款却没拿到货、静默丢支付、二次扣款 |
+| **7. 安全** | 鉴权/越权/IDOR/注入/敏感数据/重放？destructive 操作校验归属了吗？用户可控 metadata/JSON/map merge 会不会覆盖 server-owned keys（如 `idempotency_key`/`status`/`customer_id`/`recovery_*`）？ | 越权取消他人订单、数据泄漏、幂等查询被污染 |
 | **8. 性能/资源** | 热点锁/锁粒度/N+1/资源泄漏？大事务挡住别人？ | 锁竞争、超时、连接耗尽 |
 
 **第 5 维（源真相对齐）是最容易被漏的**——下面的反面例子就是。
@@ -48,6 +48,15 @@ description: "Use when designing or planning a fix/feature in high-risk domains 
 2. **逐维过表**：对每个维度，要么"不会因此挂 + 为什么"，要么"会 → 改方案/加防护"。
 3. **改完再下笔写 plan**：plan 里要能看到这些防护（CAS、状态机、对账兜底），不是事后补。
 4. 如果你发现自己只想画 happy path（正向 pending→paid），**停**——补失败/并发/重放分支再继续。
+
+## 支付幂等专项检查
+
+设计 payment/refund/charge 的幂等表、reservation、lock 或 JSON metadata 时，plan 必须明确：
+
+- **server-owned fields 不可被 caller 覆盖**：任何 `req.Metadata` / extra JSON / map merge 都要有保留字段 denylist 或 server-fields-last 规则，并测试 hostile keys（`idempotency_key`、`status`、`customer_id`、`recovery_*`、大小写/空白变体）。
+- **reservation 生命周期**：fresh pending、stale pending、succeeded with pointer、provider failure release、crash after reserve before provider result、crash after provider success before local complete。
+- **provider idempotency key 兼容**：改变 Stripe/第三方幂等 key 格式前，必须考虑已部署版本的重试窗口。pre-deploy 请求可能已经到 provider 但本地未落库；retry 若换 key 会变成第二笔外部操作。
+- **stale 策略**：不能二选一地永久 409 或超时直接删除。支付场景要复用同一个 provider idempotency key、retrieve/reconcile 外部事实，或进入人工复核；不查外部事实的 TTL 释放是风险。
 
 ## 反面例子（真实，来自本项目）
 
