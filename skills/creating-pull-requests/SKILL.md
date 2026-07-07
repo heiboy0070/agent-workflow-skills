@@ -11,7 +11,7 @@ Opening a PR is outward-facing and easy to get wrong on autopilot: assuming the 
 违反字面 == 违反精神。下面每条都不是建议,是必须。
 
 ## Gate — full review BEFORE you even suggest a PR
-Opening a PR is the LAST step, not a verification step. A change reaches "ready to PR" only after a **comprehensive multi-dimensional review** has run (rigorous-delivery **4b-full** panel — security / data-lifecycle / frontend-robustness / integration-regression, each auditing the WHOLE change in parallel, consolidated into one severity-ranked table) AND you've confirmed it's mergeable: **no open P0/P1**, P2/P3 triaged with the user. A standard single reviewer + red-team pass is **NOT** enough to even *prompt* the user to create a PR. If the full review hasn't run, STOP — run it first (covering both frontend AND backend when the change spans both repos); only then tell the user the work is PR-ready. Asking "要不要建 PR? / shall I open a PR?" off the standard pass alone is a violation of this gate.
+Opening a PR is the LAST step, not a verification step. A change reaches "ready to PR" only after a **comprehensive multi-dimensional review** has run (rigorous-delivery **4b-full** panel — security / data-lifecycle / frontend-robustness / integration-regression, each auditing the WHOLE change in parallel, consolidated into one severity-ranked table) AND you've confirmed it's mergeable: **no open P0/P1**, P2/P3 triaged with the user. A standard single reviewer + red-team pass is **NOT** enough to even *prompt* the user to create a PR. If the full review hasn't run against the latest commit, STOP — run it first (covering both frontend AND backend when the change spans both repos); only then tell the user the work is PR-ready. If the same latest commit already passed `4b-full` and no code changed after that review, do NOT repeat it; cite the existing review evidence. Asking "要不要建 PR? / shall I open a PR?" off the standard pass alone is a violation of this gate.
 
 ## Iron rules (never violate)
 1. **Base/target branch is USER-SPECIFIED — never assume or default.** It may be `main`, `master`, `develop`, `release/*`, or a parent feature branch. If the user didn't state it, **ASK and wait** — do NOT run `gh pr create` until they answer. "Repo's default is main" is not permission to assume.
@@ -20,15 +20,17 @@ Opening a PR is the LAST step, not a verification step. A change reaches "ready 
 4. **Pre-PR cleanliness gate.** Before pushing, run `git diff <base>..HEAD --name-only` and confirm it contains ONLY intended files. Catch accidentally-committed scratch/untracked files (the `git add -A` trap — prefer explicit `git add <paths>`), leftover `<<<<<<<` conflict markers, and that build/tests are green.
 5. **Don't auto-close issues, and keep issue codes out of the body.** Avoid closing keywords (`Closes`/`Fixes`/`Resolves #123`) — they silently close tracker items on merge. **Also keep issue codes (e.g. `INF-690`, `#123`) OUT of the PR body entirely — describe the issue by its subject/topic, never its tracker id** (user preference: no issue numbers in PR text). The tracker lives in the branch tooling / PR metadata, not the prose.
 6. **The enumerated list of known follow-ups / unfixed issues does NOT go in the PR body.** A PR presents *completed, verified* work. Anything the work or a review turned up but did NOT fix — deferred bugs, semantic decisions, latent edges — is surfaced to the **USER in chat**: list each one and ask whether to open a tracker issue; let the user decide. Do not inline that list in a `## 已知限制` / "Known follow-ups" section where it reads as shipping-with-known-defects. **Do NOT carry the tracker code into the PR body either** — not as a closing keyword, not as a bare `Refs INF-690`. Describe the follow-up by its subject to the user in chat; they decide whether to track it. The PR body stays free of issue numbers (Iron rule 5), and the inline enumerated defect list also doesn't belong in it.
+7. **Clean task worktrees after PR creation.** Once the PR is successfully created, remove worktree directories created for this task with safe git worktree cleanup. Never remove the user's original repo or unrelated worktrees. If cleanup is blocked, report the exact path and reason.
 
 ## Process
-0. **Full-review gate** (see **Gate** above): confirm the change passed the 4b-full multi-dimensional review — frontend AND backend if it spans both — with no open P0/P1, and the consolidated table was already shown to the user. If it hasn't run, STOP and run the full review before touching the PR flow.
+0. **Full-review gate** (see **Gate** above): confirm the latest commit passed the 4b-full multi-dimensional review — frontend AND backend if it spans both — with no open P0/P1, and the consolidated table was already shown to the user. If it already ran on the same latest commit, cite it and continue; if it hasn't run or commits changed afterward, STOP and run the full review before touching the PR flow.
 1. **Confirm base branch** (Iron rule 1) — ask if not given.
 2. **Cleanliness gate** (Iron rule 4): `git diff <base>..HEAD --name-only` only-intended; no markers; `build` + `test` green.
 3. **Draft the body** using the template below; verification as named-data → endpoint → seen-result (Iron rule 3).
 4. **Surface follow-ups to the user, NOT into the body** (Iron rule 6): if the work / a review found unfixed issues or deferred decisions, list them in chat with a recommendation and ask whether to open issues. Wait for the user's call.
 5. **Show body → wait for confirmation** (Iron rule 2).
 6. **Push** the branch, then `gh pr create --base <user-specified> --head <branch> --title "..." --body-file <file>`.
+7. **Post-PR cleanup** (Iron rule 7): run `git worktree list`, identify only this task's created worktree path(s), then `git worktree remove <path>` when safe. Re-run `git worktree list` and report the cleanup result.
 
 ## PR body template
 ```markdown
@@ -59,6 +61,7 @@ NOT like: "经真实 API 验证 / 每个提交都测过 / endpoints verified"（
 - About to put a `## 已知限制` / "Known follow-ups" / known-bugs list in the PR body → STOP, those go to the user to triage into issues (Iron rule 6).
 - About to write an issue code (`INF-690` / `#123` / `Refs ...`) anywhere in the PR body → STOP, remove it; describe the issue by its subject (Iron rule 5, user preference).
 - Used `git add -A` / `git commit -am` near the PR → STOP, check `git diff <base>..HEAD --name-only` for stray files.
+- PR was created from a temporary task worktree and you're about to leave it on disk → STOP, clean only that task worktree or explain why cleanup is blocked.
 
 ## Rationalizations (forbidden)
 | Excuse | Reality |
@@ -70,3 +73,4 @@ NOT like: "经真实 API 验证 / 每个提交都测过 / endpoints verified"（
 | "List the known bugs in the PR so reviewers know" | Follow-ups go to the **user** to triage into issues, not the PR body (Iron rule 6). The PR shows verified, completed work. |
 | "A non-closing `Refs INF-690` is harmless context" | User preference: NO issue codes in the PR body. Describe the issue by its subject; keep the tracker id out of the prose entirely. |
 | "git add -A is faster" | It commits stray untracked files. Use explicit paths; check the diff before PR. |
+| "I'll clean the worktree later" | Worktrees pile up and confuse future runs. Clean this task's temporary worktree immediately after PR creation. |

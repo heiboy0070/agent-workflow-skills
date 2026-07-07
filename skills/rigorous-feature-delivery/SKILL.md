@@ -1,11 +1,21 @@
 ---
 name: rigorous-feature-delivery
-description: Use for substantial implementation tasks, especially multi-repo or risky feature work that needs isolated worktrees, a tracked plan, SQL-as-file review, staged commits, explicit tests, blocked-test documentation, API docs, review/red-team, and Chinese commit messages.
+description: Use as the end-to-end chain controller whenever the user asks to implement, fix, complete, plan, validate, or deliver a feature, bugfix, Linear issue, technical plan, or risky方案/方案落地; also use before saying an issue is done, after pushing a completed branch, or before asking/creating a PR. Orchestrates pre-mortem-design for high-risk plans, isolated functional branch/worktree setup, rigorous-delivery verification with normal review + red-team + full review gates, creating-pull-requests for PR creation, and post-PR worktree cleanup. Branch names must be functional, not issue-number based.
 ---
 
 # Rigorous Feature Delivery
 
 Use this skill to execute large feature, refactor, or migration work end to end. Prefer it when the task spans multiple repositories, touches auth/data/schema behavior, requires deployment safety, or the user asks for a detailed plan and acceptance criteria.
+
+## Required Skill Chain
+
+Use this as the default chain for issue-driven feature/fix work:
+
+1. **Plan/design:** Use `pre-mortem-design` before finalizing plans for payments, state machines, auth, durable data, concurrency, or external integrations.
+2. **Implement/verify:** Use this skill plus `rigorous-delivery`; after code is written, `rigorous-delivery` review/red-team gates are mandatory before calling the issue complete.
+3. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure `rigorous-delivery` full review (`4b-full`) has run once against the latest pushed commit before asking whether to create a PR. Do not run it twice unless code changed after the review.
+4. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
+5. **Cleanup:** After the PR exists, clean up worktree directories created for the task so they do not accumulate.
 
 ## Workflow
 
@@ -16,6 +26,8 @@ Use this skill to execute large feature, refactor, or migration work end to end.
 
 2. Isolate the work.
    - Create a branch from the repo's mainline branch.
+   - Branch names MUST be based on the functional change, not tracker IDs or issue numbers. Good: `fix/payment-webhook-renewal-guards`; bad: `fix/inf-857-858`.
+   - Keep tracker IDs out of branch names unless the user explicitly overrides this rule.
    - Use worktrees for multi-repo or high-risk changes.
    - Record original repo paths, worktree paths, branch names, and dirty baseline status.
    - Do not revert unrelated user changes.
@@ -52,6 +64,7 @@ Use this skill to execute large feature, refactor, or migration work end to end.
 8. Review and red-team before completion.
    - Invoke `rigorous-delivery` for this gate; do not replace it with self-review.
    - Follow `rigorous-delivery` Iron rule 7: dispatch one independent normal reviewer subagent and one independent adversarial red-team subagent.
+   - Code is not "done" until normal review and red-team have both passed, or all findings are fixed/re-verified with evidence.
    - `superpowers:requesting-code-review` may only supplement the normal review. It does not satisfy the red-team requirement and cannot replace `rigorous-delivery`.
    - If `rigorous-delivery` is unavailable but `superpowers:requesting-code-review` is available, use it for the normal review and still run a separate adversarial red-team review.
    - The review must check regressions, missing permission checks, deployment ordering, table-not-found behavior, token/user mismatch, rollback behavior, data-access/performance risk, and untested paths.
@@ -63,7 +76,18 @@ Use this skill to execute large feature, refactor, or migration work end to end.
    - Use Chinese commit subject/body and include `feat` or `fix` when required by the repo or user.
    - Mention verification or deployment-safety details in commit bodies when useful.
 
-10. Final report.
+10. Push and PR readiness.
+   - Push only after focused tests, full relevant tests, normal review, red-team, and re-verification are complete.
+   - If you believe the issue is complete after push, ensure `rigorous-delivery` full review (`4b-full`) has run against the latest pushed commit and consolidate the findings before asking the user whether to create a PR.
+   - Do not ask "要不要提 PR / 可以提 PR 了吗" until full review has no open P0/P1 and P2/P3 are either fixed or explicitly surfaced to the user for triage.
+   - Treat this as the single PR-readiness gate. When `creating-pull-requests` runs later, it should verify this gate was already satisfied, not repeat it, unless commits changed after the review.
+
+11. PR and cleanup.
+   - If the user asks to create/open/submit a PR, switch to `creating-pull-requests` and follow its confirmation/body/base-branch rules.
+   - After the PR is created, remove worktree directories created for this task using safe git worktree cleanup (`git worktree remove <path>` when possible), and verify `git worktree list` no longer shows stale task worktrees.
+   - Never remove the user's original repo or unrelated worktrees.
+
+12. Final report.
    - Include branches/worktrees, commit hashes, key files, docs written, verification commands and results, blocked tests, deployment safety answer, and remaining manual steps.
    - Do not claim full acceptance when SQL, runtime, or real API checks are still blocked.
 
