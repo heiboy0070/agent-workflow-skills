@@ -12,6 +12,7 @@ This repository is the canonical source for a small set of delivery, verificatio
 | `rigorous-delivery` | Strict implementation and verification workflow requiring real API evidence, headed UI verification when applicable, independent review, and adversarial red-team checks. |
 | `pre-mortem-design` | Pre-implementation risk analysis for high-risk changes such as authentication, concurrency, durable data mutation, state machines, payments, and external integrations. |
 | `creating-pull-requests` | Pull request creation workflow requiring user-specified base branches, pre-creation PR body confirmation, clean diffs, and evidence-based verification. |
+| `writing-integration-docs` | Integration-facing API doc workflow: read the real implementation, scope to integration-only, full request/response examples, real error cases (JSON vs SSE boundary), fix doc/code drift, publish to Feishu. |
 
 ## Repository Layout
 
@@ -25,6 +26,8 @@ skills/
   pre-mortem-design/
     SKILL.md
   creating-pull-requests/
+    SKILL.md
+  writing-integration-docs/
     SKILL.md
 ```
 
@@ -49,6 +52,7 @@ ln -sfn "$PWD/skills/rigorous-feature-delivery" ~/.codex/skills/rigorous-feature
 ln -sfn "$PWD/skills/rigorous-delivery" ~/.codex/skills/rigorous-delivery
 ln -sfn "$PWD/skills/pre-mortem-design" ~/.codex/skills/pre-mortem-design
 ln -sfn "$PWD/skills/creating-pull-requests" ~/.codex/skills/creating-pull-requests
+ln -sfn "$PWD/skills/writing-integration-docs" ~/.codex/skills/writing-integration-docs
 ```
 
 For Claude:
@@ -59,6 +63,7 @@ ln -sfn "$PWD/skills/rigorous-feature-delivery" ~/.claude/skills/rigorous-featur
 ln -sfn "$PWD/skills/rigorous-delivery" ~/.claude/skills/rigorous-delivery
 ln -sfn "$PWD/skills/pre-mortem-design" ~/.claude/skills/pre-mortem-design
 ln -sfn "$PWD/skills/creating-pull-requests" ~/.claude/skills/creating-pull-requests
+ln -sfn "$PWD/skills/writing-integration-docs" ~/.claude/skills/writing-integration-docs
 ```
 
 After installation, update skill contents in this repository. The local agent directories should remain symlinks.
@@ -74,6 +79,7 @@ python3 "$QUICK_VALIDATE" skills/rigorous-feature-delivery
 python3 "$QUICK_VALIDATE" skills/rigorous-delivery
 python3 "$QUICK_VALIDATE" skills/pre-mortem-design
 python3 "$QUICK_VALIDATE" skills/creating-pull-requests
+python3 "$QUICK_VALIDATE" skills/writing-integration-docs
 ```
 
 At minimum, validation should confirm:
