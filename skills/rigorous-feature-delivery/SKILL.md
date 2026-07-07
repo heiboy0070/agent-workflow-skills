@@ -1,6 +1,6 @@
 ---
 name: rigorous-feature-delivery
-description: Use as the end-to-end chain controller whenever the user asks to implement, fix, complete, plan, validate, or deliver a feature, bugfix, Linear issue, technical plan, or risky方案/方案落地; also use before saying an issue is done, after pushing a completed branch, or before asking/creating a PR. Orchestrates pre-mortem-design for high-risk plans, isolated functional branch/worktree setup, rigorous-delivery verification with normal review + red-team + full review gates, creating-pull-requests for PR creation, and post-PR worktree cleanup. Branch names must be functional, not issue-number based.
+description: Use as the end-to-end chain controller whenever the user asks to implement, fix, complete, plan, validate, or deliver a feature, bugfix, Linear issue, technical plan, or risky方案/方案落地; also use before saying an issue is done, after pushing a completed branch, or before asking/creating a PR. Applies one-issue-per-branch/PR scoping by default, functional branch names, pre-mortem for risky plans, rigorous-delivery review/red-team/full review gates, creating-pull-requests, and post-PR worktree cleanup.
 ---
 
 # Rigorous Feature Delivery
@@ -12,15 +12,28 @@ Use this skill to execute large feature, refactor, or migration work end to end.
 Use this as the default chain for issue-driven feature/fix work:
 
 1. **Plan/design:** Use `pre-mortem-design` before finalizing plans for payments, state machines, auth, durable data, concurrency, or external integrations.
-2. **Implement/verify:** Use this skill plus `rigorous-delivery`; after code is written, `rigorous-delivery` review/red-team gates are mandatory before calling the issue complete.
-3. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure `rigorous-delivery` full review (`4b-full`) has run once against the latest pushed commit before asking whether to create a PR. Do not run it twice unless code changed after the review.
-4. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
-5. **Cleanup:** After the PR exists, clean up worktree directories created for the task so they do not accumulate.
+2. **Scope binding:** Bind the work to one tracker issue by default. One worktree, branch, and PR should map to one issue's acceptance scope unless the user explicitly authorizes a combined branch.
+3. **Implement/verify:** Use this skill plus `rigorous-delivery`; after code is written, `rigorous-delivery` review/red-team gates are mandatory before calling the issue complete.
+4. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure `rigorous-delivery` full review (`4b-full`) has run once against the latest pushed commit before asking whether to create a PR. Do not run it twice unless code changed after the review.
+5. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
+6. **Cleanup:** After the PR exists, clean up worktree directories created for the task so they do not accumulate.
+
+## Issue Scope Binding
+
+For issue-driven work, default to **one issue per worktree / branch / PR**:
+
+- Use one tracker issue's acceptance criteria as the branch boundary.
+- Branch names are still functional, not tracker IDs, but the branch scope must be traceable to exactly one issue.
+- If the investigation reveals another issue, dependency, or adjacent risk, stop and classify it as a follow-up or separate branch. Do not implement it in the current branch unless the user explicitly approves combining scopes.
+- If a batch issue contains sub-items, state which sub-items this branch covers. Do not imply the whole batch issue is complete unless every accepted sub-item is done and verified.
+- PR text should describe the completed functional scope. Do not use closing keywords or issue IDs unless the project/user explicitly requires them.
 
 ## Workflow
 
 1. Establish scope from local code before asking questions.
    - Inspect the relevant repos, routes, services, schema files, tests, and existing docs.
+   - Identify the single tracker issue or accepted sub-item this branch will cover.
+   - If a planned fix crosses into another issue's scope, split it into a separate branch or ask for explicit permission before mixing scopes.
    - Ask only when the answer cannot be discovered and a wrong assumption would be risky.
    - State assumptions explicitly in the tracking document.
 
@@ -28,13 +41,14 @@ Use this as the default chain for issue-driven feature/fix work:
    - Create a branch from the repo's mainline branch.
    - Branch names MUST be based on the functional change, not tracker IDs or issue numbers. Good: `fix/payment-webhook-renewal-guards`; bad: `fix/inf-857-858`.
    - Keep tracker IDs out of branch names unless the user explicitly overrides this rule.
+   - Keep one branch scoped to one issue by default. If another issue is discovered, write it down as a follow-up instead of folding it into the current diff.
    - Use worktrees for multi-repo or high-risk changes.
    - Record original repo paths, worktree paths, branch names, and dirty baseline status.
    - Do not revert unrelated user changes.
 
 3. Create and maintain a progress document.
    - Put the document in the primary repo unless the user asks otherwise.
-   - Include objective, constraints, repo paths, phases, files changed, tests, blocked tests, review notes, deployment plan, rollback plan, and acceptance criteria.
+   - Include objective, bound issue/sub-item, out-of-scope issue IDs or topics, constraints, repo paths, phases, files changed, tests, blocked tests, review notes, deployment plan, rollback plan, and acceptance criteria.
    - Update it during the work, not only at the end.
 
 4. Treat database changes as reviewable artifacts.
@@ -88,7 +102,8 @@ Use this as the default chain for issue-driven feature/fix work:
    - Never remove the user's original repo or unrelated worktrees.
 
 12. Final report.
-   - Include branches/worktrees, commit hashes, key files, docs written, verification commands and results, blocked tests, deployment safety answer, and remaining manual steps.
+   - Include the single issue/sub-item covered, branches/worktrees, commit hashes, key files, docs written, verification commands and results, blocked tests, deployment safety answer, and remaining manual steps.
+   - List any adjacent issues found but intentionally not implemented.
    - Do not claim full acceptance when SQL, runtime, or real API checks are still blocked.
 
 ## Deployment Safety Checklist

@@ -18,6 +18,7 @@ A discipline for completing substantial tasks with **high accuracy and real proo
 7. **Independent + adversarial review before "done".** Self-verification is not enough. After smoke passes, dispatch **TWO SEPARATE subagents**. A "subagent" = a fresh, separate agent invocation (Task/Agent tool) that did NOT write the code — reviewing it yourself under a "review" heading does NOT count; cite the invocation/agent id. (1) a NORMAL reviewer (requirements / correctness / contract / quality / **data-access & performance — N+1, request amplification, full-table scans**, judged from a real Network count or query log); (2) a RED-TEAM given the actual diff + the running endpoint + creds and told ONLY to BREAK it via the REAL API (hostile & boundary inputs, auth bypass, cross-account/IDOR via a second `AUTH_ACCOUNTS` entry against another account's entity, concurrent/duplicate ops, empty/null, malformed/oversized payloads, contract violations, injection) — a red-team that only reasons over a summary does not count. For EVERY red-team finding, record its disposition: **fixed** (with re-verify evidence) or **rejected** (with a real artifact — hitting the exact attack, against the current build, pasted verbatim — disproving it) — "not confirmed" asserted without evidence is forbidden; a finding stands until disproven. After fixing, **re-run the red-team** until no confirmed holes remain. "Smoke / unit tests passed" does NOT exempt this.
 8. **Concurrency, data integrity & cross-endpoint consistency are first-class — and CANNOT be parked as a deferred P3.** Any write that does **read-modify-write on shared mutable state** (a JSONB array/object overwritten whole, a counter, an upsert, read-list-then-replace) is a data-loss risk until proven safe with a transaction + row lock / atomic op. The red-team MUST actually **fire N concurrent real requests** at it and confirm the final state keeps all N (no lost / overwritten / orphaned records) — "it looks atomic" code reasoning does NOT count. A confirmed **concurrent data-loss / orphaned-resource / silent-overwrite** finding is **P1, never deferred** — never "push now, fix the data loss later". The normal reviewer ALSO checks: (a) **cross-endpoint representation consistency** — the same resource returned by create/upload vs read vs list must agree (a computed field, a signed-URL download flag, an enum, a derived URL); and (b) **async failure paths** — a fire-and-forget write that isn't awaited, leaving a half-written record or a misleading UI when it fails.
 9. **Issue-complete + pushed requires full review.** If you believe the issue is complete and the branch has been pushed, run the `4b-full` multi-dimensional review before saying the issue is done or asking whether to create a PR. A standard normal reviewer + red-team pass is necessary but not sufficient for PR readiness.
+10. **One issue per branch/PR by default.** For issue-driven work, bind the current branch to one tracker issue or one explicitly accepted sub-item set. If work reveals a second issue, dependency, or adjacent risk, document it as follow-up and stop before implementing it in the same branch unless the user explicitly approves combining scopes.
 
 ## DB & credentials — per project, from env
 
@@ -40,6 +41,7 @@ Different projects use different DBs/creds. **Read them from the project `.env`;
 
 ### 1. Plan (before touching code)
 - Recon the change surface: grep references, read key code, inspect DB schema. Know the full blast radius before editing.
+- Name the single issue or accepted sub-item set this branch is allowed to complete. Keep adjacent issues out of the implementation plan unless the user explicitly approved a combined branch.
 - Decompose into slices/phases. Write a plan doc (change list + verification plan + risks).
 - For scope or high-risk forks, use AskUserQuestion — don't decide unilaterally.
 
@@ -85,6 +87,7 @@ A substantial task is NOT done when the first round of fixes lands. RUN THE LOOP
 - Commit message states how it was verified; no future-work narration; end with the project's Co-Authored-By line.
 - Confirm before outward-facing/irreversible actions; follow the project's branch conventions.
 - Branch names must describe the functional change, not tracker IDs or issue numbers, unless the user explicitly requests otherwise.
+- Before committing issue-driven work, check that the diff only implements the bound issue or accepted sub-item set. If the diff contains another issue's scope, split it out or get explicit user approval before commit/push.
 - After pushing a branch for a completed issue, run the 4b-full review gate before suggesting or preparing a PR.
 
 ## Definition of Done — your completion reply MUST contain this filled checklist
@@ -124,5 +127,6 @@ A "done" claim missing any line below is invalid:
 - A frontend write fired without `await` (fire-and-forget) whose failure path leaves a half-written record or a misleading UI — verify the failure path, don't just the happy path.
 - About to ask the user "建 PR 吗? / 可以提 PR 了" for a substantial change when only the standard reviewer + red-team ran — the full multi-dimensional review (4b-full, front+back) is the GATE before suggesting a PR; run it and show the consolidated table first.
 - About to verify a frontend/UI change in a HEADLESS browser (or letting a subagent drive headless) — the user wants to SEE it; re-run with `agent-browser --headed`. And if a UI fix "doesn't work" on first try, suspect a stale `next dev` (HMR) before suspecting the code — restart the dev server and re-test.
+- An issue-driven branch contains fixes for a second tracker issue because it was "nearby" or "overlapped" — split it or ask first. Traceability beats opportunistic bundling.
 
 All of these mean: run the staged verify — **smoke → subagent (normal + red-team) → full** — and paste the raw artifacts. Letter == spirit, **both directions**: "I followed the spirit" is no exemption, AND technically satisfying the letter while defeating the purpose (a self-review labeled "subagent", a retyped/trimmed "raw" response, an unbound placeholder command) is equally a violation.
