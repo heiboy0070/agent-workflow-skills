@@ -86,7 +86,21 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - If dedicated review/red-team skills or subagents are unavailable, record that limitation in the tracking document and final report; label the result as a local fallback, not as the required independent review.
 
 9. Commit by functional slice.
-   - Commit major pieces separately so they can be reverted independently.
+   - For substantial single-issue work, create commits by module/functional slice. Target 2-5 commits.
+   - Use these commit grouping rules, in order:
+     1. DB/schema/migration compatibility changes: one `feat:` or `fix:` commit.
+     2. Core backend service/business logic changes: one commit per cohesive service/module.
+     3. API/WS/controller/route contract changes: one commit if they are separable from core service logic.
+     4. Tests: commit with the module they verify when small; use one dedicated test commit when tests span multiple modules.
+     5. Docs/handoff/progress notes: commit with the related module when narrow; use one final docs commit when docs summarize the whole feature.
+     6. Review/red-team fixes: use a dedicated `fix:` commit when the fix is discovered after an earlier committed slice; otherwise include it in the relevant module commit before first commit.
+   - Keep commit count within 2-5 for normal substantial work. More than 5 commits requires explicit user approval before pushing/PR.
+   - A single commit is allowed only for tiny changes or naturally atomic changes. For non-trivial feature/fix/migration work, 1 commit requires explicit user approval before pushing/PR.
+   - Do not create separate commits for formatting-only, import-only, generated-output-only, or one-line follow-up edits unless they belong to different functional modules. Fold them into the related module commit.
+   - Before committing, write the intended commit plan in the progress document:
+     - expected commit count
+     - each commit's module/function scope
+     - which files or file groups belong to each commit
    - Use Chinese commit subject/body and include `feat` or `fix` when required by the repo or user.
    - Mention verification or deployment-safety details in commit bodies when useful.
 
@@ -103,6 +117,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
 
 12. Final report.
    - Include the single issue/sub-item covered, branches/worktrees, commit hashes, key files, docs written, verification commands and results, blocked tests, deployment safety answer, and remaining manual steps.
+   - Include the actual commit count and list each commit hash with its module/function scope. If the branch has 1 commit or more than 5 commits, state the explicit user approval that allowed it.
    - List any adjacent issues found but intentionally not implemented.
    - Do not claim full acceptance when SQL, runtime, or real API checks are still blocked.
 

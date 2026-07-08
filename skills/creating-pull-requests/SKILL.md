@@ -22,11 +22,18 @@ Opening a PR is the LAST step, not a verification step. A change reaches "ready 
 6. **The enumerated list of known follow-ups / unfixed issues does NOT go in the PR body.** A PR presents *completed, verified* work. Anything the work or a review turned up but did NOT fix — deferred bugs, semantic decisions, latent edges — is surfaced to the **USER in chat**: list each one and ask whether to open a tracker issue; let the user decide. Do not inline that list in a `## 已知限制` / "Known follow-ups" section where it reads as shipping-with-known-defects. **Do NOT carry the tracker code into the PR body either** — not as a closing keyword, not as a bare `Refs INF-690`. Describe the follow-up by its subject to the user in chat; they decide whether to track it. The PR body stays free of issue numbers (Iron rule 5), and the inline enumerated defect list also doesn't belong in it.
 7. **One PR maps to one issue by default.** Before creating the PR, confirm the diff is scoped to one tracker issue or one explicitly accepted sub-item set. If the branch contains a second issue's work because it was nearby, STOP and split it or get explicit user approval before PR creation.
 8. **Clean task worktrees after PR creation.** Once the PR is successfully created, remove worktree directories created for this task with safe git worktree cleanup. Never remove the user's original repo or unrelated worktrees. If cleanup is blocked, report the exact path and reason.
+9. **Commit structure must follow module/function slices.** Before creating the PR, show the commit count and commit list. For substantial work, the branch should normally have 2-5 commits split by DB/schema, core service logic, API/WS contract, tests, docs, or review-fix slices as applicable. If there is exactly 1 commit for substantial work, or more than 5 commits, stop and get explicit user approval or restructure the commits before PR creation.
 
 ## Process
 0. **Review gate** (see **Gate** above): confirm the latest commit passed the matching risk-tiered PR gate — high-risk changes need 4b-full impact-radius review; low/medium-risk changes need one comprehensive impact-radius reviewer plus focused tests — with no open P0/P1, and the consolidated result was already shown to the user. If it already ran on the same latest commit, cite it and continue; if it hasn't run or commits changed afterward, STOP and run the matching review before touching the PR flow.
 1. **Confirm base branch** (Iron rule 1) — ask if not given.
 2. **Scope gate** (Iron rule 7): identify the single issue/topic this PR completes, then inspect the changed files/commits for accidental second-issue scope. Follow-ups found by review go to the user in chat, not into this PR.
+2a. **Commit structure gate:** run `git log --oneline <base>..HEAD` and show:
+   - total commit count
+   - each commit's module/function scope
+   - whether each commit matches one of: DB/schema, core service logic, API/WS contract, tests, docs, review-fix
+   For substantial changes with exactly 1 commit, ask before continuing: split into module/function commits, or keep one commit by explicit approval.
+   For more than 5 commits, ask before continuing: squash related commits by module/function, or keep the longer history by explicit approval.
 3. **Cleanliness gate** (Iron rule 4): `git diff <base>..HEAD --name-only` only-intended; no markers; `build` + `test` green.
 4. **Draft the body** using the template below; verification as named-data → endpoint → seen-result (Iron rule 3).
 5. **Surface follow-ups to the user, NOT into the body** (Iron rule 6): if the work / a review found unfixed issues or deferred decisions, list them in chat with a recommendation and ask whether to open issues. Wait for the user's call.
@@ -63,6 +70,9 @@ NOT like: "经真实 API 验证 / 每个提交都测过 / endpoints verified"（
 - About to put a `## 已知限制` / "Known follow-ups" / known-bugs list in the PR body → STOP, those go to the user to triage into issues (Iron rule 6).
 - About to write an issue code (`INF-690` / `#123` / `Refs ...`) anywhere in the PR body → STOP, remove it; describe the issue by its subject (Iron rule 5, user preference).
 - About to create one PR that contains two tracker issues because they overlap → STOP. Split the branch or ask for explicit approval to combine.
+- About to create a PR for substantial work with exactly 1 commit and no explicit user approval → STOP. Split by module/function slice or ask.
+- About to create a PR with more than 5 commits and no explicit user approval → STOP. Squash related commits by module/function slice or ask.
+- A commit contains unrelated modules that match different slice categories, such as migration + controller + docs, and the branch is substantial → STOP. Split by module/function unless the user approved the combined commit.
 - Used `git add -A` / `git commit -am` near the PR → STOP, check `git diff <base>..HEAD --name-only` for stray files.
 - PR was created from a temporary task worktree and you're about to leave it on disk → STOP, clean only that task worktree or explain why cleanup is blocked.
 
