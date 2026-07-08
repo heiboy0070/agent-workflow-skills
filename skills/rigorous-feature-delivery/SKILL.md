@@ -15,7 +15,8 @@ Use this as the default chain for issue-driven feature/fix work:
 2. **Scope binding:** Bind the work to one tracker issue by default. One worktree, branch, and PR should map to one issue's acceptance scope unless the user explicitly authorizes a combined branch.
 3. **Implement/verify:** Use this skill plus `rigorous-delivery`; after code is written, `rigorous-delivery` review/red-team gates are mandatory before calling the issue complete.
 4. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure the `rigorous-delivery` risk-tiered PR gate has run once against the latest pushed commit before asking whether to create a PR. High-risk changes still require impact-radius full review (`4b-full`); low/medium-risk changes may use one comprehensive impact-radius reviewer plus focused tests. It must cover the current diff and high-coupling upstream/downstream flows, not unrelated repository areas. Do not run it twice unless code changed after the review.
-5. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
+5. **PR-ready handoff:** 到可提 PR 阶段，先向用户输出：`base` 分支、`head` 分支、PR 标题、PR 正文。必须得到用户确认后再进入 `creating-pull-requests` 流程。
+6. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
 6. **Cleanup:** After the PR exists, clean up worktree directories created for the task so they do not accumulate.
 
 ## Issue Scope Binding
@@ -111,7 +112,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Treat this as the single PR-readiness gate. When `creating-pull-requests` runs later, it should verify this gate was already satisfied, not repeat it, unless commits changed after the review.
 
 11. PR and cleanup.
-   - If the user asks to create/open/submit a PR, switch to `creating-pull-requests` and follow its confirmation/body/base-branch rules.
+   - If the user asks to create/open/submit a PR, first output PR-ready handoff（`base` + `head` + title + body）并等待用户确认，然后切到 `creating-pull-requests`，执行其后续步骤。
    - After the PR is created, remove worktree directories created for this task using safe git worktree cleanup (`git worktree remove <path>` when possible), and verify `git worktree list` no longer shows stale task worktrees.
    - Never remove the user's original repo or unrelated worktrees.
 

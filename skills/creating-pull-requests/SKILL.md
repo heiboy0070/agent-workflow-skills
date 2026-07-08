@@ -35,9 +35,13 @@ Opening a PR is the LAST step, not a verification step. A change reaches "ready 
    For substantial changes with exactly 1 commit, ask before continuing: split into module/function commits, or keep one commit by explicit approval.
    For more than 5 commits, ask before continuing: squash related commits by module/function, or keep the longer history by explicit approval.
 3. **Cleanliness gate** (Iron rule 4): `git diff <base>..HEAD --name-only` only-intended; no markers; `build` + `test` green.
-4. **Draft the body** using the template below; verification as named-data → endpoint → seen-result (Iron rule 3).
+4. **Draft and present PR-ready block** using the template below; verification as named-data → endpoint → seen-result (Iron rule 3). The block must include:
+   - base branch
+   - head branch
+   - title
+   - full body
 5. **Surface follow-ups to the user, NOT into the body** (Iron rule 6): if the work / a review found unfixed issues or deferred decisions, list them in chat with a recommendation and ask whether to open issues. Wait for the user's call.
-6. **Show body → wait for confirmation** (Iron rule 2).
+6. **Show base + head + body → wait for confirmation** (Iron rule 2).
 7. **Push** the branch, then `gh pr create --base <user-specified> --head <branch> --title "..." --body-file <file>`.
 8. **Post-PR cleanup** (Iron rule 8): run `git worktree list`, identify only this task's created worktree path(s), then `git worktree remove <path>` when safe. Re-run `git worktree list` and report the cleanup result.
 
