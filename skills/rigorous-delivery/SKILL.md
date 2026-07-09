@@ -51,6 +51,7 @@ Different projects use different DBs/creds. **Read them from the project `.env`;
 ### 3. Implement
 - Use the compiler to find all references (delete a field → build errors → fix each). Don't rely on grep alone for completeness.
 - Preserve the outward API contract; don't casually delete DTO fields. If a field must go, do the frontend check (Iron rule 5).
+- 关键链路（支付、账务、状态机、重试、并发）必须补齐最小关键业务日志：入口参数摘要、状态迁移、外部网关请求前后、幂等/锁冲突、回滚或补偿分支。日志要求可检索（trace/request/businessID）、结构化、低噪声，避免在高频热路径加 `fmt.Printf` 式噪音。
 
 ### 4. Verify — staged: smoke → review → full (API ONLY)
 Run these in order. Do NOT jump to "done" after the smoke step.

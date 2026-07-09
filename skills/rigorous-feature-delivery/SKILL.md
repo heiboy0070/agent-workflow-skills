@@ -83,6 +83,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - `superpowers:requesting-code-review` may only supplement the normal review. It does not satisfy a required high-risk red-team pass and cannot replace `rigorous-delivery`.
    - If `rigorous-delivery` is unavailable but `superpowers:requesting-code-review` is available, use it for the normal review and still run a separate adversarial red-team review when the change is high-risk.
    - The review must check regressions, missing permission checks, deployment ordering, table-not-found behavior, token/user mismatch, rollback behavior, data-access/performance risk, and untested paths.
+   - 在支付/退款/状态机/重试等关键业务路径的提案和落地中，要求预先定义最小可用业务日志点：关键入口参数摘要、分支判断/状态迁移、外部网关调用前后、幂等键/乐观锁冲突处理、重试/补偿动作。日志应为结构化、可追溯（如 requestID/traceID/businessID），只打印关键节点，避免热路径高频噪声日志。
    - Fix findings or document residual risks with evidence.
    - If dedicated review/red-team skills or subagents are unavailable, record that limitation in the tracking document and final report; label the result as a local fallback, not as the required independent review.
 
