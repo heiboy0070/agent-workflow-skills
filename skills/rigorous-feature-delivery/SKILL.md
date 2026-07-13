@@ -7,6 +7,16 @@ description: Use as the end-to-end chain controller whenever the user asks to im
 
 Use this skill to execute large feature, refactor, or migration work end to end. Prefer it when the task spans multiple repositories, touches auth/data/schema behavior, requires deployment safety, or the user asks for a detailed plan and acceptance criteria.
 
+## Token-Efficient Execution Policy
+
+- The current agent owns reconnaissance, planning, implementation, normal review, red-team, verification, and PR preparation end to end.
+- Do not invoke Task/Agent/subagent tools unless the user explicitly requests delegation in the current task. Multi-repo work alone is not permission to delegate.
+- Read/search independent files in parallel through ordinary tools when available, but avoid duplicating context in multiple agents.
+- Create one evidence ledger per task: command, commit/build identity, concrete data, observed result, and raw-output reference. Reuse it across review, acceptance, and PR preparation while the relevant diff is unchanged.
+- Use risk-tiered depth: low/medium risk gets a combined review checklist; high risk gets separate current-agent normal and adversarial passes plus the sequential `4b-full` matrix.
+- After a narrow fix, rerun only impacted tests and review rows. Rerun the full gate only when the review radius changes.
+- Keep user updates and final evidence compact. Include full raw output only for failures, short critical responses, disputed findings, or explicit user requests.
+
 ## Required Skill Chain
 
 Use this as the default chain for issue-driven feature/fix work:
@@ -14,7 +24,7 @@ Use this as the default chain for issue-driven feature/fix work:
 1. **Plan/design:** Use `pre-mortem-design` before finalizing plans for payments, state machines, auth, durable data, concurrency, or external integrations.
 2. **Scope binding:** Bind the work to one tracker issue by default. One worktree, branch, and PR should map to one issue's acceptance scope unless the user explicitly authorizes a combined branch.
 3. **Implement/verify:** Use this skill plus `rigorous-delivery`; after code is written, `rigorous-delivery` review/red-team gates are mandatory before calling the issue complete.
-4. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure the `rigorous-delivery` risk-tiered PR gate has run once against the latest pushed commit before asking whether to create a PR. High-risk changes still require impact-radius full review (`4b-full`); low/medium-risk changes may use one comprehensive impact-radius reviewer plus focused tests. It must cover the current diff and high-coupling upstream/downstream flows, not unrelated repository areas. Do not run it twice unless code changed after the review.
+4. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure the `rigorous-delivery` risk-tiered PR gate has run once against the latest pushed commit before asking whether to create a PR. High-risk changes require the current-agent impact-radius matrix (`4b-full`); low/medium-risk changes use one combined pass plus focused tests. Reuse the gate while the reviewed diff is unchanged.
 5. **PR-ready handoff:** 到可提 PR 阶段，先向用户输出：`base` 分支、`head` 分支、PR 标题、PR 正文。必须得到用户确认后再进入 `creating-pull-requests` 流程。
 6. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
 6. **Cleanup:** After the PR exists, clean up worktree directories created for the task so they do not accumulate.
@@ -77,15 +87,14 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - For deployment-risk work, include rollout order, smoke tests, rollback switch, and what is not guaranteed.
 
 8. Review and red-team before completion.
-   - Invoke `rigorous-delivery` for this gate; do not replace it with self-review.
-   - Follow `rigorous-delivery` Iron rule 7: state the risk tier, then run the matching independent review gate. High-risk changes require one independent normal reviewer subagent and one independent adversarial red-team subagent; low/medium-risk changes may use one comprehensive impact-radius reviewer unless the user asks for more.
+   - Invoke `rigorous-delivery` for this gate and follow its current-agent review checklists.
+   - State the risk tier. High-risk changes require separate normal and adversarial passes by the current agent; low/medium-risk changes use one combined impact pass unless the user asks for more.
    - Code is not "done" until the required risk-tiered review has passed, or all P0-P2 findings are fixed/re-verified with evidence.
-   - `superpowers:requesting-code-review` may only supplement the normal review. It does not satisfy a required high-risk red-team pass and cannot replace `rigorous-delivery`.
-   - If `rigorous-delivery` is unavailable but `superpowers:requesting-code-review` is available, use it for the normal review and still run a separate adversarial red-team review when the change is high-risk.
+   - Do not invoke another review workflow that automatically delegates. The current-agent normal and adversarial passes are the canonical gate.
    - The review must check regressions, missing permission checks, deployment ordering, table-not-found behavior, token/user mismatch, rollback behavior, data-access/performance risk, and untested paths.
    - 在支付/退款/状态机/重试等关键业务路径的提案和落地中，要求预先定义最小可用业务日志点：关键入口参数摘要、分支判断/状态迁移、外部网关调用前后、幂等键/乐观锁冲突处理、重试/补偿动作。日志应为结构化、可追溯（如 requestID/traceID/businessID），只打印关键节点，避免热路径高频噪声日志。
    - Fix findings or document residual risks with evidence.
-   - If dedicated review/red-team skills or subagents are unavailable, record that limitation in the tracking document and final report; label the result as a local fallback, not as the required independent review.
+   - Record the selected review radius, findings, dispositions, and evidence in the shared ledger so PR preparation does not repeat the review.
 
 9. Commit by functional slice.
    - For substantial single-issue work, create commits by module/functional slice. Target 2-5 commits.

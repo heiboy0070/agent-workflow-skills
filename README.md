@@ -9,7 +9,7 @@ This repository is the canonical source for a small set of delivery, verificatio
 | Skill | Purpose |
 | --- | --- |
 | `rigorous-feature-delivery` | Multi-repository feature delivery workflow with planning, SQL review files, staged verification, documentation, review/red-team steps, and Chinese commit messages. |
-| `rigorous-delivery` | Strict implementation and verification workflow requiring real API evidence, headed UI verification when applicable, independent review, and adversarial red-team checks. |
+| `rigorous-delivery` | Strict implementation and verification workflow requiring real API evidence, headed UI verification when applicable, and current-agent review/red-team checks. |
 | `pre-mortem-design` | Pre-implementation risk analysis for high-risk changes such as authentication, concurrency, durable data mutation, state machines, payments, and external integrations. |
 | `creating-pull-requests` | Pull request creation workflow requiring user-specified base branches, pre-creation PR body confirmation, clean diffs, and evidence-based verification. |
 | `writing-integration-docs` | Integration-facing API doc workflow: read the real implementation, scope to integration-only, full request/response examples, real error cases (JSON vs SSE boundary), fix doc/code drift, publish to Feishu. |
@@ -67,6 +67,12 @@ ln -sfn "$PWD/skills/writing-integration-docs" ~/.claude/skills/writing-integrat
 ```
 
 After installation, update skill contents in this repository. The local agent directories should remain symlinks.
+
+## Token-Efficient Defaults
+
+The delivery skills keep one agent responsible for planning, implementation, review, red-team, and verification. They do not automatically create subagents; delegation happens only when the user explicitly requests it for the current task.
+
+Quality gates remain risk-tiered: high-risk changes still receive separate normal and adversarial passes plus a multi-dimensional impact review, but those checks run sequentially and reuse one evidence ledger. Narrow fixes rerun only affected checks, and chat reports compact reproducible evidence instead of duplicating full successful test logs.
 
 ## Validation
 
