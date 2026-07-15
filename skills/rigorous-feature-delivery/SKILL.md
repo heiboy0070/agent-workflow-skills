@@ -103,11 +103,12 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
      2. Core backend service/business logic changes: one commit per cohesive service/module.
      3. API/WS/controller/route contract changes: one commit if they are separable from core service logic.
      4. Tests: commit with the module they verify when small; use one dedicated test commit when tests span multiple modules.
-     5. Docs/handoff/progress notes: commit with the related module when narrow; use one final docs commit when docs summarize the whole feature.
+     5. Docs/handoff/progress notes: always commit them with the related implementation, test, or review-fix slice. Never create a standalone documentation commit, including for design, spec, plan, progress, evidence, handoff, or final-summary documents. If a summary spans the whole feature, include it in the final functional or review-fix commit.
      6. Review/red-team fixes: use a dedicated `fix:` commit when the fix is discovered after an earlier committed slice; otherwise include it in the relevant module commit before first commit.
    - Keep commit count within 2-5 for normal substantial work. More than 5 commits requires explicit user approval before pushing/PR.
    - A single commit is allowed only for tiny changes or naturally atomic changes. For non-trivial feature/fix/migration work, 1 commit requires explicit user approval before pushing/PR.
    - Do not create separate commits for formatting-only, import-only, generated-output-only, or one-line follow-up edits unless they belong to different functional modules. Fold them into the related module commit.
+   - This documentation commit rule overrides subordinate skill instructions. If a brainstorming, planning, documentation, or delivery skill says to commit a design/spec/plan before implementation, write and review the document in the working tree without committing it, then fold it into the first related implementation commit. If an unpushed standalone documentation commit was created, undo only that commit while preserving its file changes and fold those changes into the related implementation commit.
    - Before committing, write the intended commit plan in the progress document:
      - expected commit count
      - each commit's module/function scope
