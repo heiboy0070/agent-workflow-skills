@@ -6,7 +6,7 @@ description: Use when asked to open / submit / create a pull request (提交 PR 
 # Creating Pull Requests
 
 ## Overview
-Opening a PR is outward-facing and easy to get wrong on autopilot: assuming the base branch, creating before the user sees the body, and writing vague verification. This skill enforces: **user-specified base, confirm-before-create, evidence-based description.**
+Opening a PR is outward-facing and easy to get wrong on autopilot: assuming the base branch, creating before the user sees the body, burying deployment prerequisites, and writing vague verification. This skill enforces: **user-specified base, deployment-critical information first, confirm-before-create, evidence-based description.**
 
 违反字面 == 违反精神。下面每条都不是建议,是必须。
 
@@ -25,6 +25,7 @@ Opening a PR is the LAST step, not a verification step. A change reaches "ready 
 7. **One PR maps to one issue by default.** Before creating the PR, confirm the diff is scoped to one tracker issue or one explicitly accepted sub-item set. If the branch contains a second issue's work because it was nearby, STOP and split it or get explicit user approval before PR creation.
 8. **Clean task worktrees after PR creation.** Once the PR is successfully created, remove worktree directories created for this task with safe git worktree cleanup. Never remove the user's original repo or unrelated worktrees. If cleanup is blocked, report the exact path and reason.
 9. **Commit structure must follow module/function slices.** Before creating the PR, show the commit count and commit list. For substantial work, the branch should normally have 2-5 commits split by DB/schema, core service logic, API/WS contract, tests, explicitly required product docs, or review-fix slices as applicable. Workflow Markdown never counts as a commit slice. If there is exactly 1 commit for substantial work, or more than 5 commits, stop and get explicit user approval or restructure the commits before PR creation.
+10. **The PR body starts with three deployment slots in this exact order:** `上线前必须配置的环境变量` → `部署/开关顺序` → `注意事项与适用边界`. Keep them above the overview so a deployer cannot miss them. Every slot is present even when not applicable; write `无新增必需项` or `无特殊顺序` instead of deleting it. Environment variables list name, required/optional status, value shape/source, and failure behavior without exposing secret values. Deployment order names migrations, code deploy, dependency/worker enablement, smoke checks, and traffic/feature-flag enablement when applicable. Notes contain operational cautions and verified scope boundaries; unresolved bugs/follow-ups still go to the user in chat under Iron rule 6.
 
 ## Process
 0. **Review gate** (see **Gate** above): confirm the latest commit passed the matching current-agent risk-tiered PR gate, with no open P0/P1. If it ran on the same diff, cite the shared evidence ledger and continue; if relevant code changed, rerun only affected rows unless the review radius changed.
@@ -44,6 +45,7 @@ Opening a PR is the LAST step, not a verification step. A change reaches "ready 
    - head branch
    - title
    - full body
+   - the three mandatory top sections in Iron rule 10, populated from the actual diff/config/deploy plan rather than placeholders
 5. **Surface follow-ups to the user, NOT into the body** (Iron rule 6): if the work / a review found unfixed issues or deferred decisions, list them in chat with a recommendation and ask whether to open issues. Wait for the user's call.
 6. **Show base + head + body → wait for confirmation** (Iron rule 2).
 7. **Push** the branch, then `gh pr create --base <user-specified> --head <branch> --title "..." --body-file <file>`.
@@ -51,6 +53,18 @@ Opening a PR is the LAST step, not a verification step. A change reaches "ready 
 
 ## PR body template
 ```markdown
+## 上线前必须配置的环境变量
+- `VARIABLE_NAME`（必填/可选）：值的来源或格式；缺失时的行为。不要填写真实 secret。
+
+## 部署/开关顺序
+1. 数据库迁移或依赖准备。
+2. 部署代码并保持新流量开关关闭。
+3. 完成 smoke check 后再开启 worker/流量/功能开关。
+
+## 注意事项与适用边界
+- 写部署人员必须知道的运行方式、数据生命周期、客户端边界或访问范围。
+- 这里只写已验证的边界；未修 bug 和待办仍在聊天中单独请用户决定是否建 issue。
+
 ## 概述           — why/what, one paragraph
 ## 做了什么 / 完成的功能   — features by area/module (describe by feature, not issue number)
 ## 关键设计         — notable decisions / trade-offs
@@ -80,6 +94,8 @@ NOT like: "经真实 API 验证 / 每个提交都测过 / endpoints verified"（
 - About to create one PR that contains two tracker issues because they overlap → STOP. Split the branch or ask for explicit approval to combine.
 - About to create a PR for substantial work with exactly 1 commit and no explicit user approval → STOP. Split by module/function slice or ask.
 - About to create a PR with more than 5 commits and no explicit user approval → STOP. Squash related commits by module/function slice or ask.
+- About to place `## 概述` before environment variables, deployment order, or operational notes → STOP. Restore the three mandatory top sections in Iron rule 10, even when a section says no new requirements.
+- About to write only variable names with no required/optional status or missing-value behavior, or to paste actual secret values → STOP. Complete the deployment contract without exposing credentials.
 - A commit contains unrelated modules that match different slice categories, such as migration + controller + docs, and the branch is substantial → STOP. Split by module/function unless the user approved the combined commit.
 - Used `git add -A` / `git commit -am` near the PR → STOP, check `git diff <base>..HEAD --name-only` for stray files.
 - About to show or push a branch containing a username, tracker ID, issue number, Chinese, spaces, or underscores → STOP, rename it to `<group>/<english-kebab-case-description>` and validate it first.
@@ -95,5 +111,8 @@ NOT like: "经真实 API 验证 / 每个提交都测过 / endpoints verified"（
 | "'经真实 API 验证' / 'verified read-after-write' is enough" | Name the entity (id/name) + the endpoint + the value you saw, per check. A summary that can't be re-run is not evidence. |
 | "List the known bugs in the PR so reviewers know" | Follow-ups go to the **user** to triage into issues, not the PR body (Iron rule 6). The PR shows verified, completed work. |
 | "A non-closing `Refs INF-690` is harmless context" | User preference: NO issue codes in the PR body. Describe the issue by its subject; keep the tracker id out of the prose entirely. |
+| "Environment variables are already in `.env.example`, reviewers can find them" | Deployers review the PR before searching the tree. Put required names, value shape/source, and failure behavior at the very top; link to the file only as supporting detail. |
+| "There are no special deploy steps, so I can omit those sections" | The explicit `无新增必需项` / `无特殊顺序` is the evidence that the deployment question was checked rather than forgotten. |
+| "Known bugs are also notes, so they belong in 注意事项" | Operational boundaries belong there; unfixed defects still follow Iron rule 6 and are triaged with the user outside the PR body. |
 | "git add -A is faster" | It commits stray untracked files. Use explicit paths; check the diff before PR. |
 | "I'll clean the worktree later" | Worktrees pile up and confuse future runs. Clean this task's temporary worktree immediately after PR creation. |
