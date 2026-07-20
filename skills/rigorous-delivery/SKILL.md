@@ -1,6 +1,6 @@
 ---
 name: rigorous-delivery
-description: Use when the user asks to START a substantial work task (refactor / feat / fix / migration) — not for light Q&A. Enforces a high-accuracy delivery loop — plan → implement → verify with REAL API + DB (read-after-write, edge cases, frontend field check) → check off acceptance WITH EVIDENCE → commit. Refactor = behavior-preserving slices + backup before destructive ops. feat/fix = TDD first. DB credentials/connection are per-project — always read from the project's .env, never hardcode. Triggers on phrases like "开始做X", "start implementing", "执行这个里程碑/切片".
+description: Use when the user asks to start a substantial refactor, feature, fix, migration, milestone, or implementation slice; not for light Q&A.
 ---
 
 # Rigorous Delivery
@@ -19,6 +19,7 @@ A discipline for completing substantial tasks with **high accuracy and real proo
 8. **Concurrency, data integrity & cross-endpoint consistency are first-class — and CANNOT be parked as a deferred P3.** Any write that does **read-modify-write on shared mutable state** (a JSONB array/object overwritten whole, a counter, an upsert, read-list-then-replace) is a data-loss risk until proven safe with a transaction + row lock / atomic op. The red-team MUST actually **fire N concurrent real requests** at it and confirm the final state keeps all N (no lost / overwritten / orphaned records) — "it looks atomic" code reasoning does NOT count. A confirmed **concurrent data-loss / orphaned-resource / silent-overwrite** finding is **P1, never deferred** — never "push now, fix the data loss later". The normal reviewer ALSO checks: (a) **cross-endpoint representation consistency** — the same resource returned by create/upload vs read vs list must agree (a computed field, a signed-URL download flag, an enum, a derived URL); (b) **async failure paths** — a fire-and-forget write that isn't awaited, leaving a half-written record or a misleading UI when it fails; and (c) **server-owned field integrity** — caller-provided metadata/JSON/map values cannot override fields that drive auth, idempotency, status, ownership, recovery, or lookup semantics.
 9. **Issue-complete + pushed requires one reusable risk-tiered review record.** Run the matching PR review gate against the latest commit before saying the issue is done or suggesting a PR. Reuse that record while the reviewed diff is unchanged. High-risk changes require the `4b-full` sequential matrix; low/medium-risk changes use one combined impact pass plus focused tests. Scope review to the diff and genuinely coupled flows, not the whole repository.
 10. **One issue per branch/PR by default.** For issue-driven work, bind the current branch to one tracker issue or one explicitly accepted sub-item set. If work reveals a second issue, dependency, or adjacent risk, document it as follow-up and stop before implementing it in the same branch unless the user explicitly approves combining scopes.
+11. **Finish the functional pass before polishing.** After scope and high-risk design are clear, implement the accepted functional surface as one concentrated pass. Do not interrupt every ordinary endpoint to rewrite Markdown, polish prose, or run a full review cycle. Consolidate ordinary regression tests, documentation, review, and evidence after the functional pass is complete. Critical paths still follow the test policy in step 0.
 
 ## DB & credentials — per project, from env
 
@@ -36,25 +37,32 @@ Different projects use different DBs/creds. **Read them from the project `.env`;
 ## Flow
 
 ### 0. Classify the task
-- **feat / fix → TDD first.** Write a failing test that expresses the intended behavior → implement until green → then real-API verify.
+- **Critical behavior → TDD first.** Write a failing test before implementation when changing a state machine, concurrency/idempotency behavior, auth/authorization, durable mutation or migration, external callback/retry boundary, security-sensitive validation, public contract whose breakage would block clients, or a reproduced defect.
+- **Ordinary behavior → batch implementation, then grouped regression.** Routine CRUD/query/mapping endpoints may be implemented together after requirements are clear, then covered by focused table-driven or contract tests after the complete functional pass. Do not force one RED/GREEN cycle per ordinary endpoint.
+- If the user explicitly requests broader TDD, follow that request. Never use the ordinary-path allowance to skip tests entirely or to downgrade a critical path.
 - **refactor → behavior-preserving slices.** Output must be byte-identical contract. Split into independently verifiable slices (by entity / table / feature); each slice is implement → verify → commit.
 
 ### 1. Plan (before touching code)
 - Recon the change surface: grep references, read key code, inspect DB schema. Know the full blast radius before editing.
 - Name the single issue or accepted sub-item set this branch is allowed to complete. Keep adjacent issues out of the implementation plan unless the user explicitly approved a combined branch.
-- Decompose into slices/phases. Write a plan doc (change list + verification plan + risks).
+- Decompose into implementation, verification, and finalization phases in the working context. Do not create or continuously update a Markdown plan/progress file during implementation unless the user or repository explicitly requires an upfront artifact.
+- Preserve commands and raw evidence in tool output or a temporary ledger while coding; consolidate durable Markdown only after functionality and verification stabilize.
 - For scope or high-risk forks, use AskUserQuestion — don't decide unilaterally.
 
 ### 2. Safety net (before destructive ops)
 - Before dropping tables/columns or any irreversible migration: back up (pg_dump the whole DB or affected tables) into the project's `db-backups/`, add it to `.gitignore`, and record the restore command.
 
 ### 3. Implement
+- Complete the accepted business functionality before the documentation/polish pass. Batch related ordinary endpoints and resolve compiler/runtime integration issues without pausing after each endpoint for documentation or a full test cycle.
+- For critical behavior identified in step 0, keep the smallest relevant RED/GREEN loop inside the implementation pass. This exception protects correctness without turning every endpoint into its own ceremony.
 - Use the compiler to find all references (delete a field → build errors → fix each). Don't rely on grep alone for completeness.
 - Preserve the outward API contract; don't casually delete DTO fields. If a field must go, do the frontend check (Iron rule 5).
 - 关键链路（支付、账务、状态机、重试、并发）必须补齐最小关键业务日志：入口参数摘要、状态迁移、外部网关请求前后、幂等/锁冲突、回滚或补偿分支。日志要求可检索（trace/request/businessID）、结构化、低噪声，避免在高频热路径加 `fmt.Printf` 式噪音。
 
 ### 4. Verify — staged: smoke → review → full (API ONLY)
 Run these in order. Do NOT jump to "done" after the smoke step.
+
+Start this staged gate after the accepted functional pass is complete. Add grouped regression/contract coverage for ordinary behavior here; critical behavior should already have its focused RED/GREEN tests from step 0.
 
 **Frontend / UI verification MUST run in a HEADED browser (`agent-browser --headed`), never headless.** Confirm the dev server is running the current code; restart a stale long-lived dev server when changes do not appear. Reuse one browser session across related cases and close it when verification ends.
 
@@ -86,6 +94,7 @@ Use real API evidence when the impacted surface is runnable; otherwise record wh
 A substantial task is NOT done when the first round of fixes lands. Run autonomously: smoke → risk-tiered review → fix P0/P1/P2 → re-run only the affected checklist/tests → repeat until clean. Batch genuine product/scope decisions into one user question. Stop only when the work is PR-ready, fixes are re-verified, compact evidence is reported, and follow-ups are triaged.
 
 ### 5. Check off acceptance (with evidence)
+- Perform the durable Markdown/documentation pass here, after implementation and staged verification stabilize. Update plan, progress, handoff, API, deployment, and acceptance notes once using the accumulated evidence instead of editing them after every endpoint.
 - Two states only: `[x]` (done — append HOW it was verified) / `[ ]` (not done). No `[~]`.
 - Anything genuinely achieved (even if implemented in an earlier milestone) → `[x]`.
 - Do NOT write "why it wasn't done" justifications in the doc. Tell the user verbally and let them decide.
@@ -111,6 +120,8 @@ A "done" claim missing any line below is invalid:
 - [ ] latest commit passed the reusable PR gate; high-risk changes have one deduplicated 4b-full matrix and no open P0/P1
 
 ## Anti-patterns (forbidden)
+- Interrupting every ordinary CRUD/query endpoint for a separate RED/GREEN cycle, progress-document edit, and review pass when no critical-risk trigger applies.
+- Rewriting plan/progress Markdown throughout implementation when no user or repository rule requires a live document.
 - Concluding "no missing fields / frontend unaffected" from code alone, without a real response.
 - Verifying functionality via the DB at all (querying OR editing rows) instead of the real API — DB is for the backup only.
 - Marking undone work `[x]`, or reframing undone work as "merged into a future milestone" to look complete.
@@ -126,6 +137,7 @@ A "done" claim missing any line below is invalid:
 - Deleting or losing raw evidence before disputed/failed checks are resolved.
 
 ## Red flags — STOP, you're about to under-verify
+- Using "batch implementation" as a reason to skip focused tests for state machines, concurrency/idempotency, auth, durable mutation, external retries, public contract breakage, or reproduced defects.
 - "It builds and a unit test passes — ship it."
 - "Smoke passed, no need for the red-team pass."
 - "The normal pass found nothing, so the required adversarial pass can be skipped."
