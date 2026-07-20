@@ -1,6 +1,6 @@
 ---
 name: rigorous-feature-delivery
-description: Use as the end-to-end chain controller whenever the user asks to implement, fix, complete, plan, validate, or deliver a feature, bugfix, Linear issue, technical plan, or risky方案/方案落地; also use before saying an issue is done, after pushing a completed branch, or before asking/creating a PR. Applies one-issue-per-branch/PR scoping by default, functional branch names, pre-mortem for risky plans, rigorous-delivery review/red-team/full review gates, creating-pull-requests, and post-PR worktree cleanup.
+description: Use when implementing, fixing, completing, planning, validating, or delivering a feature, bugfix, Linear issue, technical plan, or risky方案/方案落地; also use before declaring completion or preparing a PR.
 ---
 
 # Rigorous Feature Delivery
@@ -12,6 +12,7 @@ Use this skill to execute large feature, refactor, or migration work end to end.
 - The current agent owns reconnaissance, planning, implementation, normal review, red-team, verification, and PR preparation end to end.
 - Do not invoke Task/Agent/subagent tools unless the user explicitly requests delegation in the current task. Multi-repo work alone is not permission to delegate.
 - Read/search independent files in parallel through ordinary tools when available, but avoid duplicating context in multiple agents.
+- After scope and critical-risk design are clear, finish one concentrated functional implementation pass before ordinary regression, review, prose polish, and durable Markdown updates. Keep only critical-path test-first loops inside that pass.
 - Create one evidence ledger per task: command, commit/build identity, concrete data, observed result, and raw-output reference. Reuse it across review, acceptance, and PR preparation while the relevant diff is unchanged.
 - Use risk-tiered depth: low/medium risk gets a combined review checklist; high risk gets separate current-agent normal and adversarial passes plus the sequential `4b-full` matrix.
 - After a narrow fix, rerun only impacted tests and review rows. Rerun the full gate only when the review radius changes.
@@ -23,7 +24,7 @@ Use this as the default chain for issue-driven feature/fix work:
 
 1. **Plan/design:** Use `pre-mortem-design` before finalizing plans for payments, state machines, auth, durable data, concurrency, or external integrations.
 2. **Scope binding:** Bind the work to one tracker issue by default. One worktree, branch, and PR should map to one issue's acceptance scope unless the user explicitly authorizes a combined branch.
-3. **Implement/verify:** Use this skill plus `rigorous-delivery`; after code is written, `rigorous-delivery` review/red-team gates are mandatory before calling the issue complete.
+3. **Implement/verify:** Use this skill plus `rigorous-delivery`; follow its risk-tiered test policy, concentrated functional pass, grouped ordinary regression, and final documentation pass. Its review/red-team gates remain mandatory before calling the issue complete.
 4. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure the `rigorous-delivery` risk-tiered PR gate has run once against the latest pushed commit before asking whether to create a PR. High-risk changes require the current-agent impact-radius matrix (`4b-full`); low/medium-risk changes use one combined pass plus focused tests. Reuse the gate while the reviewed diff is unchanged.
 5. **PR-ready handoff:** 到可提 PR 阶段，先向用户输出：`base` 分支、`head` 分支、PR 标题、PR 正文。必须得到用户确认后再进入 `creating-pull-requests` 流程。
 6. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
@@ -57,10 +58,10 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Record original repo paths, worktree paths, branch names, and dirty baseline status.
    - Do not revert unrelated user changes.
 
-3. Create and maintain a progress document.
-   - Put the document in the primary repo unless the user asks otherwise.
-   - Include objective, bound issue/sub-item, out-of-scope issue IDs or topics, constraints, repo paths, phases, files changed, tests, blocked tests, review notes, deployment plan, rollback plan, and acceptance criteria.
-   - Update it during the work, not only at the end.
+3. Defer durable documentation until the finalization pass.
+   - Keep scope, decisions, commands, raw evidence, and blockers in the working context or tool log while implementing.
+   - Do not create or continuously update plan/progress Markdown during implementation unless the user or repository explicitly requires a live artifact.
+   - After functionality and verification stabilize, update the primary repo's progress/handoff Markdown once with objective, bound issue/sub-item, out-of-scope topics, constraints, repo paths, phases, files changed, tests, blocked tests, review notes, deployment plan, rollback plan, and acceptance criteria.
 
 4. Treat database changes as reviewable artifacts.
    - Never execute production or project SQL unless the user explicitly asks and approves.
@@ -68,12 +69,16 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Document which tests remain blocked until SQL is manually reviewed and executed.
 
 5. Implement in reviewable slices.
+   - Treat slices as logical scope and commit boundaries, not mandatory stop points after every ordinary endpoint.
+   - Complete related ordinary CRUD/query/mapping interfaces in one concentrated functional pass, then add grouped regression/contract coverage.
+   - Use test-first implementation only for the critical behaviors classified by `rigorous-delivery`, including state machines, concurrency/idempotency, auth, durable mutation, external callbacks/retries, security-sensitive validation, client-blocking contracts, and reproduced defects.
    - Follow existing code patterns and keep unrelated refactors out.
    - Add feature flags for risky behavior when old behavior must continue during deployment.
    - Prefer backward-compatible schema and response changes.
    - For auth/token work, document token ownership, expiry, revocation, and fallback behavior.
 
 6. Verify with real commands.
+   - Start the staged smoke/review/full gate after the accepted functional pass is complete; do not interrupt every ordinary endpoint with a full verification cycle.
    - Before starting local services, state each port and which backend it represents.
    - Keep frontend base URL variables mapped to their real backend roles; do not point unrelated PHP/V2/Node variables to the same address unless explicitly doing a labeled mock-only test.
    - Run focused tests for new behavior.
@@ -83,6 +88,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Stop any local dev server, mock API, browser session, or background process started for the test when the test finishes, fails, or is interrupted.
 
 7. Write handoff documentation.
+   - Perform this as one final documentation pass after implementation and verification stabilize, using the accumulated evidence.
    - For API work, create an API document with endpoint purpose, request examples, response examples, auth requirements, feature flags, errors, and notes.
    - For deployment-risk work, include rollout order, smoke tests, rollback switch, and what is not guaranteed.
 

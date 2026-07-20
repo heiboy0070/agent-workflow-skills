@@ -1,4 +1,4 @@
 interface:
   display_name: "严谨功能交付"
-  short_description: "Plan verify document and commit risky multi repo features"
-  default_prompt: "按低 token 且严谨的功能交付流程执行：由当前 agent 完成规划、实现、测试、review 和 red-team，不自动创建子 agent；复用证据并仅增量复测，维护追踪文档和中文功能提交。"
+  short_description: "集中实现功能，再统一验证、审查与文档收口"
+  default_prompt: "使用 $rigorous-feature-delivery 集中完成业务功能，按风险分级测试，并在验证稳定后统一更新文档和准备中文功能提交。"
