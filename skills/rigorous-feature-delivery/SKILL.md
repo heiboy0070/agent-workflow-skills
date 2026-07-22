@@ -12,7 +12,7 @@ Use this skill to execute large feature, refactor, or migration work end to end.
 - The current agent owns reconnaissance, planning, implementation, normal review, red-team, verification, and PR preparation end to end.
 - Do not invoke Task/Agent/subagent tools unless the user explicitly requests delegation in the current task. Multi-repo work alone is not permission to delegate.
 - Read/search independent files in parallel through ordinary tools when available, but avoid duplicating context in multiple agents.
-- After scope and critical-risk design are clear, finish one concentrated functional implementation pass before ordinary regression, review, prose polish, and durable Markdown updates. Keep only critical-path test-first loops inside that pass.
+- After scope and critical-risk design are clear, finish one concentrated functional implementation pass before ordinary regression, review, and final user handoff. Keep only critical-path test-first loops inside that pass.
 - Create one evidence ledger per task: command, commit/build identity, concrete data, observed result, and raw-output reference. Reuse it across review, acceptance, and PR preparation while the relevant diff is unchanged.
 - Use risk-tiered depth: low/medium risk gets a combined review checklist; high risk gets separate current-agent normal and adversarial passes plus the sequential `4b-full` matrix.
 - After a narrow fix, rerun only impacted tests and review rows. Rerun the full gate only when the review radius changes.
@@ -24,7 +24,7 @@ Use this as the default chain for issue-driven feature/fix work:
 
 1. **Plan/design:** Use `pre-mortem-design` before finalizing plans for payments, state machines, auth, durable data, concurrency, or external integrations.
 2. **Scope binding:** Bind the work to one tracker issue by default. One worktree, branch, and PR should map to one issue's acceptance scope unless the user explicitly authorizes a combined branch.
-3. **Implement/verify:** Use this skill plus `rigorous-delivery`; follow its risk-tiered test policy, concentrated functional pass, grouped ordinary regression, and final documentation pass. Its review/red-team gates remain mandatory before calling the issue complete.
+3. **Implement/verify:** Use this skill plus `rigorous-delivery`; follow its risk-tiered test policy, concentrated functional pass, grouped ordinary regression, and final evidence handoff. Its review/red-team gates remain mandatory before calling the issue complete.
 4. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure the `rigorous-delivery` risk-tiered PR gate has run once against the latest pushed commit before asking whether to create a PR. High-risk changes require the current-agent impact-radius matrix (`4b-full`); low/medium-risk changes use one combined pass plus focused tests. Reuse the gate while the reviewed diff is unchanged.
 5. **PR-ready handoff:** 到可提 PR 阶段，先向用户输出：`base` 分支、`head` 分支、PR 标题、PR 正文。必须得到用户确认后再进入 `creating-pull-requests` 流程。
 6. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
@@ -47,7 +47,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Identify the single tracker issue or accepted sub-item this branch will cover.
    - If a planned fix crosses into another issue's scope, split it into a separate branch or ask for explicit permission before mixing scopes.
    - Ask only when the answer cannot be discovered and a wrong assumption would be risky.
-   - State assumptions explicitly in the tracking document.
+   - State assumptions in the working context or temporary evidence ledger.
 
 2. Isolate the work.
    - Create a branch from the repo's mainline branch.
@@ -60,10 +60,11 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Record original repo paths, worktree paths, branch names, and dirty baseline status.
    - Do not revert unrelated user changes.
 
-3. Defer durable documentation until the finalization pass.
-   - Keep scope, decisions, commands, raw evidence, and blockers in the working context or tool log while implementing.
-   - Do not create or continuously update plan/progress Markdown during implementation unless the user or repository explicitly requires a live artifact.
-   - After functionality and verification stabilize, update the primary repo's progress/handoff Markdown once with objective, bound issue/sub-item, out-of-scope topics, constraints, repo paths, phases, files changed, tests, blocked tests, review notes, deployment plan, rollback plan, and acceptance criteria.
+3. Keep workflow artifacts out of product history.
+   - Keep scope, plans, decisions, commands, raw evidence, blockers, commit plans, and handoff notes in the working context, tool log, or a temporary path outside the repository.
+   - Agent-generated plan/spec/design/progress/tracker/evidence/handoff Markdown is temporary workflow material. Even if created, it MUST NOT be staged, committed, or included in a PR.
+   - This rule overrides subordinate skills that require saving or committing `docs/superpowers/plans/*.md`, `docs/superpowers/specs/*.md`, or similar workflow documents. Store such content outside the repository or provide it in chat instead.
+   - A Markdown file may enter git only when the user explicitly requests that exact document as a deliverable or the repository explicitly requires it as a versioned product artifact. API/integration documentation requested as part of the product is not a workflow artifact.
 
 4. Treat database changes as reviewable artifacts.
    - Never execute production or project SQL unless the user explicitly asks and approves.
@@ -86,13 +87,13 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Run focused tests for new behavior.
    - Run build/lint/typecheck for touched services where available.
    - If full suites fail on baseline, document the baseline failures and run scoped tests.
-   - If runtime, database, or table prerequisites are missing, create a blocked-test Markdown file with exact unblock steps and acceptance criteria.
+   - If runtime, database, or table prerequisites are missing, record exact unblock steps and acceptance criteria in chat or a temporary file outside the repository.
    - Stop any local dev server, mock API, browser session, or background process started for the test when the test finishes, fails, or is interrupted.
 
-7. Write handoff documentation.
-   - Perform this as one final documentation pass after implementation and verification stabilize, using the accumulated evidence.
-   - For API work, create an API document with endpoint purpose, request examples, response examples, auth requirements, feature flags, errors, and notes.
-   - For deployment-risk work, include rollout order, smoke tests, rollback switch, and what is not guaranteed.
+7. Deliver the handoff without repository clutter.
+   - Provide the final handoff in chat after implementation and verification stabilize, using the accumulated evidence.
+   - Create an API/integration or deployment document in the repository only when the user requested that document or the repository requires it as a product artifact.
+   - For deployment-risk work, include rollout order, smoke tests, rollback switch, and what is not guaranteed in the final handoff even when no file is created.
 
 8. Review and red-team before completion.
    - Invoke `rigorous-delivery` for this gate and follow its current-agent review checklists.
@@ -111,13 +112,13 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
      2. Core backend service/business logic changes: one commit per cohesive service/module.
      3. API/WS/controller/route contract changes: one commit if they are separable from core service logic.
      4. Tests: commit with the module they verify when small; use one dedicated test commit when tests span multiple modules.
-     5. Docs/handoff/progress notes: always commit them with the related implementation, test, or review-fix slice. Never create a standalone documentation commit, including for design, spec, plan, progress, evidence, handoff, or final-summary documents. If a summary spans the whole feature, include it in the final functional or review-fix commit.
+     5. Explicit product documentation: when the user or repository requires a versioned API/integration/product document, commit it with the related implementation or review-fix slice; never use workflow notes as a commit-count filler.
      6. Review/red-team fixes: use a dedicated `fix:` commit when the fix is discovered after an earlier committed slice; otherwise include it in the relevant module commit before first commit.
    - Keep commit count within 2-5 for normal substantial work. More than 5 commits requires explicit user approval before pushing/PR.
    - A single commit is allowed only for tiny changes or naturally atomic changes. For non-trivial feature/fix/migration work, 1 commit requires explicit user approval before pushing/PR.
    - Do not create separate commits for formatting-only, import-only, generated-output-only, or one-line follow-up edits unless they belong to different functional modules. Fold them into the related module commit.
-   - This documentation commit rule overrides subordinate skill instructions. If a brainstorming, planning, documentation, or delivery skill says to commit a design/spec/plan before implementation, write and review the document in the working tree without committing it, then fold it into the first related implementation commit. If an unpushed standalone documentation commit was created, undo only that commit while preserving its file changes and fold those changes into the related implementation commit.
-   - Before committing, write the intended commit plan in the progress document:
+   - The workflow-artifact exclusion overrides subordinate skill instructions. If another skill says to save or commit a design/spec/plan, keep it outside the repository and do not fold it into any functional commit.
+   - Before committing, write the intended commit plan in the working context or temporary ledger:
      - expected commit count
      - each commit's module/function scope
      - which files or file groups belong to each commit
@@ -126,6 +127,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
 
 10. Push and PR readiness.
    - Before pushing, rerun `scripts/validate-branch-name.sh "$(git branch --show-current)"`. A rejected branch MUST be renamed and rechecked before any push or PR handoff.
+   - Run `scripts/validate-workflow-artifacts.sh <base> [head]`. Remove every rejected workflow Markdown file from the commit/PR unless the user or repository explicitly required that exact versioned document; record that exception in the PR handoff.
    - Push only after focused tests, full relevant tests, required risk-tiered review, and re-verification are complete.
    - If you believe the issue is complete after push, ensure the `rigorous-delivery` risk-tiered PR gate has run against the latest pushed commit and consolidate the findings before asking the user whether to create a PR.
    - Do not ask "要不要提 PR / 可以提 PR 了吗" until the required PR gate has no open P0/P1 and P2/P3 are either fixed or explicitly surfaced to the user for triage.
@@ -137,7 +139,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Never remove the user's original repo or unrelated worktrees.
 
 12. Final report.
-   - Include the single issue/sub-item covered, branches/worktrees, commit hashes, key files, docs written, verification commands and results, blocked tests, deployment safety answer, and remaining manual steps.
+   - Include the single issue/sub-item covered, branches/worktrees, commit hashes, key files, explicitly requested product docs, verification commands and results, blocked tests, deployment safety answer, and remaining manual steps.
    - Include the actual commit count and list each commit hash with its module/function scope. If the branch has 1 commit or more than 5 commits, state the explicit user approval that allowed it.
    - List any adjacent issues found but intentionally not implemented.
    - Do not claim full acceptance when SQL, runtime, or real API checks are still blocked.

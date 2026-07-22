@@ -1,4 +1,4 @@
 interface:
   display_name: "严谨功能交付"
-  short_description: "集中实现功能，再统一验证、审查与文档收口"
-  default_prompt: "使用 $rigorous-feature-delivery 集中完成业务功能，按风险分级测试，并在验证稳定后统一更新文档和准备中文功能提交。"
+  short_description: "集中实现功能，统一验证审查，并确保代理流程文档不进入提交"
+  default_prompt: "使用 $rigorous-feature-delivery 集中完成业务功能，按风险分级测试，并确保代理流程 Markdown 不进入提交或 PR。"
