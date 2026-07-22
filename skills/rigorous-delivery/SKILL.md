@@ -104,7 +104,7 @@ A substantial task is NOT done when the first round of fixes lands. Run autonomo
 - Commit each verified slice; docs go WITH their task's commit (don't commit docs alone).
 - Commit message states how it was verified; no future-work narration; end with the project's Co-Authored-By line.
 - Confirm before outward-facing/irreversible actions; follow the project's branch conventions.
-- Branch names must describe the functional change, not tracker IDs or issue numbers, unless the user explicitly requests otherwise.
+- Follow the branch-name contract in `rigorous-feature-delivery`: `<group>/<english-kebab-case-description>`, ASCII English only, no usernames, tracker IDs, issue numbers, Chinese, spaces, or underscores. Validate the proposed name before branch/worktree creation and again before push.
 - Before committing issue-driven work, check that the diff only implements the bound issue or accepted sub-item set. If the diff contains another issue's scope, split it out or get explicit user approval before commit/push.
 - After pushing a branch for a completed issue, run the required risk-tiered PR review gate before suggesting or preparing a PR. High-risk changes still need 4b-full; low/medium-risk changes may cite the comprehensive impact-radius reviewer if the latest commit already passed and no code changed after it.
 

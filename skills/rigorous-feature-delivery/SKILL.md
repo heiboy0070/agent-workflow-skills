@@ -51,8 +51,10 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
 
 2. Isolate the work.
    - Create a branch from the repo's mainline branch.
-   - Branch names MUST be based on the functional change, not tracker IDs or issue numbers. Good: `fix/payment-webhook-renewal-guards`; bad: `fix/inf-857-858`.
-   - Keep tracker IDs out of branch names unless the user explicitly overrides this rule.
+   - Branch names MUST use `<group>/<english-kebab-case-description>`. Use the repository's documented group when present; otherwise choose a functional group such as `feature`, `feat`, `fix`, `hotfix`, `refactor`, `chore`, `docs`, or `test`.
+   - The entire branch name MUST be ASCII English: lowercase letters and digits separated by single hyphens. Do not use Chinese, spaces, underscores, usernames, owner prefixes, or generated issue-title slugs.
+   - Branch names MUST describe the functional change and MUST NOT contain tracker IDs, issue numbers, or issue-key fragments. Good: `fix/payment-webhook-renewal-guards`; bad: `ruanlianjie/inf-857-修复支付`, `fix/inf-857-858`, or `feature/PROJ-123-payment-fix`.
+   - Before creating a branch or worktree, run `scripts/validate-branch-name.sh <branch>` from this skill directory. If the validator rejects the name, choose a new name; do not create first and rename later.
    - Keep one branch scoped to one issue by default. If another issue is discovered, write it down as a follow-up instead of folding it into the current diff.
    - Use worktrees for multi-repo or high-risk changes.
    - Record original repo paths, worktree paths, branch names, and dirty baseline status.
@@ -123,6 +125,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Mention verification or deployment-safety details in commit bodies when useful.
 
 10. Push and PR readiness.
+   - Before pushing, rerun `scripts/validate-branch-name.sh "$(git branch --show-current)"`. A rejected branch MUST be renamed and rechecked before any push or PR handoff.
    - Push only after focused tests, full relevant tests, required risk-tiered review, and re-verification are complete.
    - If you believe the issue is complete after push, ensure the `rigorous-delivery` risk-tiered PR gate has run against the latest pushed commit and consolidate the findings before asking the user whether to create a PR.
    - Do not ask "要不要提 PR / 可以提 PR 了吗" until the required PR gate has no open P0/P1 and P2/P3 are either fixed or explicitly surfaced to the user for triage.
