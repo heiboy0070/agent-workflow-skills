@@ -20,19 +20,27 @@ Use this skill to execute large feature, refactor, or migration work end to end.
 
 ## Required Skill Chain
 
-Use this as the default chain for issue-driven feature/fix work:
+Use this as the default chain for feature/fix work:
 
 1. **Plan/design:** Use `pre-mortem-design` before finalizing plans for payments, state machines, auth, durable data, concurrency, or external integrations.
-2. **Scope binding:** Bind the work to one tracker issue by default. One worktree, branch, and PR should map to one issue's acceptance scope unless the user explicitly authorizes a combined branch.
-3. **Implement/verify:** Use this skill plus `rigorous-delivery`; follow its risk-tiered test policy, concentrated functional pass, grouped ordinary regression, and final evidence handoff. Its review/red-team gates remain mandatory before calling the issue complete.
-4. **Ready-to-PR gate:** If the issue is considered complete and the branch has been pushed, ensure the `rigorous-delivery` risk-tiered PR gate has run once against the latest pushed commit before asking whether to create a PR. High-risk changes require the current-agent impact-radius matrix (`4b-full`); low/medium-risk changes use one combined pass plus focused tests. Reuse the gate while the reviewed diff is unchanged.
+2. **Tracker preflight:** First bind an existing tracker issue when the user provides one or a matching issue already exists. If no issue exists, continue with the user's accepted request as the scope boundary. Never create an issue only because this workflow is active; create one only when the user explicitly asks.
+3. **Implement/verify:** Use this skill plus `rigorous-delivery`; follow its risk-tiered test policy, concentrated functional pass, grouped ordinary regression, and final evidence handoff. Its review/red-team gates remain mandatory before calling the accepted scope complete.
+4. **Ready-to-PR gate:** If the accepted scope is considered complete and the branch has been pushed, ensure the `rigorous-delivery` risk-tiered PR gate has run once against the latest pushed commit before asking whether to create a PR. High-risk changes require the current-agent impact-radius matrix (`4b-full`); low/medium-risk changes use one combined pass plus focused tests. Reuse the gate while the reviewed diff is unchanged.
 5. **PR-ready handoff:** 到可提 PR 阶段，先向用户输出：`base` 分支、`head` 分支、PR 标题、PR 正文。必须得到用户确认后再进入 `creating-pull-requests` 流程。
 6. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
 6. **Cleanup:** After the PR exists, clean up worktree directories created for the task so they do not accumulate.
 
 ## Issue Scope Binding
 
-For issue-driven work, default to **one issue per worktree / branch / PR**:
+Run tracker binding as a preflight, not as an issue-creation requirement:
+
+- If the user supplies an issue, bind the work to it before implementation.
+- If an accessible tracker contains a clear matching issue, bind that existing issue and record the match.
+- If no matching issue exists, do not create one automatically and do not block implementation. Treat the user's accepted request or explicitly accepted sub-item set as the branch boundary.
+- Treat exploratory ideas, temporary experiments, and provisional investigations as valid untracked work unless the user explicitly promotes them into an issue.
+- Create a new tracker issue only when the user explicitly requests issue creation. Do not infer permission from “use the workflow,” “start implementation,” or the presence of a Linear project.
+
+When an existing issue is bound, default to **one issue per worktree / branch / PR**:
 
 - Use one tracker issue's acceptance criteria as the branch boundary.
 - Branch names are still functional, not tracker IDs, but the branch scope must be traceable to exactly one issue.
@@ -44,7 +52,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
 
 1. Establish scope from local code before asking questions.
    - Inspect the relevant repos, routes, services, schema files, tests, and existing docs.
-   - Identify the single tracker issue or accepted sub-item this branch will cover.
+   - Check for a user-provided or clearly matching existing tracker issue. Bind it when found; otherwise record the user's accepted request or accepted sub-item set as the branch scope without creating a new issue.
    - If a planned fix crosses into another issue's scope, split it into a separate branch or ask for explicit permission before mixing scopes.
    - Ask only when the answer cannot be discovered and a wrong assumption would be risky.
    - State assumptions in the working context or temporary evidence ledger.
@@ -55,7 +63,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - The entire branch name MUST be ASCII English: lowercase letters and digits separated by single hyphens. Do not use Chinese, spaces, underscores, usernames, owner prefixes, or generated issue-title slugs.
    - Branch names MUST describe the functional change and MUST NOT contain tracker IDs, issue numbers, or issue-key fragments. Good: `fix/payment-webhook-renewal-guards`; bad: `ruanlianjie/inf-857-修复支付`, `fix/inf-857-858`, or `feature/PROJ-123-payment-fix`.
    - Before creating a branch or worktree, run `scripts/validate-branch-name.sh <branch>` from this skill directory. If the validator rejects the name, choose a new name; do not create first and rename later.
-   - Keep one branch scoped to one issue by default. If another issue is discovered, write it down as a follow-up instead of folding it into the current diff.
+   - Keep one branch scoped to one bound issue or one accepted request by default. If another issue is discovered, write it down as a follow-up instead of folding it into the current diff.
    - Use worktrees for multi-repo or high-risk changes.
    - Record original repo paths, worktree paths, branch names, and dirty baseline status.
    - Do not revert unrelated user changes.
@@ -106,7 +114,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Record the selected review radius, findings, dispositions, and evidence in the shared ledger so PR preparation does not repeat the review.
 
 9. Commit by functional slice.
-   - For substantial single-issue work, create commits by module/functional slice. Target 2-5 commits.
+   - For substantial work, create commits by module/functional slice. Target 2-5 commits whether the scope comes from a bound issue or an accepted untracked request.
    - Use these commit grouping rules, in order:
      1. DB/schema/migration compatibility changes: one `feat:` or `fix:` commit.
      2. Core backend service/business logic changes: one commit per cohesive service/module.
@@ -129,7 +137,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Before pushing, rerun `scripts/validate-branch-name.sh "$(git branch --show-current)"`. A rejected branch MUST be renamed and rechecked before any push or PR handoff.
    - Run `scripts/validate-workflow-artifacts.sh <base> [head]`. Remove every rejected workflow Markdown file from the commit/PR unless the user or repository explicitly required that exact versioned document; record that exception in the PR handoff.
    - Push only after focused tests, full relevant tests, required risk-tiered review, and re-verification are complete.
-   - If you believe the issue is complete after push, ensure the `rigorous-delivery` risk-tiered PR gate has run against the latest pushed commit and consolidate the findings before asking the user whether to create a PR.
+   - If you believe the accepted scope is complete after push, ensure the `rigorous-delivery` risk-tiered PR gate has run against the latest pushed commit and consolidate the findings before asking the user whether to create a PR.
    - Do not ask "要不要提 PR / 可以提 PR 了吗" until the required PR gate has no open P0/P1 and P2/P3 are either fixed or explicitly surfaced to the user for triage.
    - Treat this as the single PR-readiness gate. When `creating-pull-requests` runs later, it should verify this gate was already satisfied, not repeat it, unless commits changed after the review.
 
@@ -139,7 +147,7 @@ For issue-driven work, default to **one issue per worktree / branch / PR**:
    - Never remove the user's original repo or unrelated worktrees.
 
 12. Final report.
-   - Include the single issue/sub-item covered, branches/worktrees, commit hashes, key files, explicitly requested product docs, verification commands and results, blocked tests, deployment safety answer, and remaining manual steps.
+   - Include the bound issue when one exists; otherwise name the accepted request/sub-item scope. Also include branches/worktrees, commit hashes, key files, explicitly requested product docs, verification commands and results, blocked tests, deployment safety answer, and remaining manual steps.
    - Include the actual commit count and list each commit hash with its module/function scope. If the branch has 1 commit or more than 5 commits, state the explicit user approval that allowed it.
    - List any adjacent issues found but intentionally not implemented.
    - Do not claim full acceptance when SQL, runtime, or real API checks are still blocked.
