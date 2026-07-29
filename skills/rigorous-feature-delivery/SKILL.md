@@ -77,6 +77,10 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
 4. Treat database changes as reviewable artifacts.
    - Never execute production or project SQL unless the user explicitly asks and approves.
    - Add migration or SQL files with clear comments and execution notes.
+   - Before creating a follow-up migration, determine whether the existing feature migration has reached production or another shared immutable environment.
+   - If the feature migration has not reached production, keep one complete schema entry: add every required table, column, index, backfill, and compatibility guard to that original migration. If a development or personal test database may have executed an earlier revision, append database-version-compatible idempotent ALTER/backfill statements to the end of the same file so both a clean production database and the partially migrated test database can execute that one file safely.
+   - Create a new follow-up migration only after the original migration has reached production/shared immutable state or repository policy forbids editing applied migrations. Do not scatter required DDL across chat, PR text, deployment documents, or multiple SQL files merely because a personal test database ran an earlier draft.
+   - Verify both paths before handoff: clean database executes the complete migration; earlier-revision database executes the updated file without duplicate-column/table failures. Compare every table/column/index referenced by the code against the migration artifact.
    - Document which tests remain blocked until SQL is manually reviewed and executed.
 
 5. Implement in reviewable slices.
