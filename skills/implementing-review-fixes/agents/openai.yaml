@@ -1,0 +1,7 @@
+interface:
+  display_name: "审查后安全修复"
+  short_description: "落实审查意见前识别并上报业务、计费与用户体验影响"
+  default_prompt: "Use $implementing-review-fixes to safely implement these review findings without silently changing business behavior."
+
+policy:
+  allow_implicit_invocation: true
