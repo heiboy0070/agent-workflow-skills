@@ -38,6 +38,7 @@ Different projects use different DBs/creds. **Read them from the project `.env`;
 
 ### 0. Classify the task
 - **Critical behavior → TDD first.** Write a failing test before implementation when changing a state machine, concurrency/idempotency behavior, auth/authorization, durable mutation or migration, external callback/retry boundary, security-sensitive validation, public contract whose breakage would block clients, or a reproduced defect.
+- **State machine → 不变式测试必写**：除了 case 测试，必须写"属性测试"——遍历某些维度组合断言不变式始终成立。例如支付 webhook + 主动查单交叉验证时，写 `Test_NeverDropPayment` 遍历 payload=S × 全 query 组合，断言 decision 绝不 skip/fail。其他常见不变式：并发 N 次相同请求最终只生效 1 次、累计金额 ≤ 原单、状态机无死状态。
 - **Ordinary behavior → batch implementation, then grouped regression.** Routine CRUD/query/mapping endpoints may be implemented together after requirements are clear, then covered by focused table-driven or contract tests after the complete functional pass. Do not force one RED/GREEN cycle per ordinary endpoint.
 - If the user explicitly requests broader TDD, follow that request. Never use the ordinary-path allowance to skip tests entirely or to downgrade a critical path.
 - **refactor → behavior-preserving slices.** Output must be byte-identical contract. Split into independently verifiable slices (by entity / table / feature); each slice is implement → verify → commit.
@@ -86,12 +87,16 @@ The current agent checks applicable dimensions sequentially in one matrix. Do no
 - **Payment/idempotency lifecycle** — reservation freshness/staleness, provider idempotency-key reuse, provider idempotency-key backward compatibility across deploys, stale recovery vs permanent 409, server-owned metadata fields protected from caller override, fallback lookup source-of-truth.
 - **Frontend robustness / UX / a11y** — loading / error / disabled states, desktop vs mobile parity, edge inputs (empty / oversized / unsupported type / network drop), client-side pre-validation, blob / memory cleanup (`createObjectURL`→`revokeObjectURL`), keyboard / aria, fire-and-forget failure paths.
 - **Integration / regression / contract** — front↔back DTO field alignment (incl. internal fields that must NOT leak to the client), breakage of adjacent features, interaction with sync / other services, DI wiring, error-code mapping.
+- **Error surface / 内部信息泄露** — handler/service 返回的错误是否直接 surface 到响应体？grep `err\.Error()` 在 handler 层的使用；DB 连接串/SQL 片段/ORM 内部错误/stack trace 必须在集中错误中间件里 sanitize；只返 requestID + 通用消息；server 端日志按 requestID 存完整堆栈。内部 endpoint（cron/webhook）同样审计。
+- **Serverless / FC 适配**（仅当部署在 serverless 平台时适用）— 后台 goroutine / worker 是否可靠？多实例并发是否走 DB lease？snowflake/分布式 ID 节点是否多实例撞号？timer endpoint 鉴权是否三重（HMAC + timestamp + nonce）？body 是否限大小防 DoS？webhook 同步处理总时间是否 < 函数 timeout？
 Use real API evidence when the impacted surface is runnable; otherwise record why focused tests are the practical evidence. Return one deduplicated P0-P3 table with file:line, disposition, and evidence. Do not repeat checks already covered by the normal/red-team passes; reference their evidence instead.
 
 **4c. Full / pressure verification.** Run applicable edge cases, every P0-P2 regression case, relevant suites, and frontend contract checks. Use table-driven tests or one scripted API matrix when cases share setup; report each case's input and observed result without duplicating common setup/output. Do not repeat unrelated batteries after a narrow fix.
 
 ### 4d. Loop until PR-ready — don't stop mid-way to ask "没问题吧?"
 A substantial task is NOT done when the first round of fixes lands. Run autonomously: smoke → risk-tiered review → fix P0/P1/P2 → re-run only the affected checklist/tests → repeat until clean. Batch genuine product/scope decisions into one user question. Stop only when the work is PR-ready, fixes are re-verified, compact evidence is reported, and follow-ups are triaged.
+
+**多轮 review 退出条件**：高风险（支付/状态机/并发/鉴权）的 substantial 任务，单轮 normal+adversarial 不够。KingLuckyRealtime Onerway 接入实测：8 轮 review 挖出 12 个 P1（每轮 1-4 个），单轮会漏 60%+。退出条件：**连续 2 轮零 P1**，或剩余 P1 全部"凭证阻塞 / 外部依赖不可控"。每轮换 review 角度：架构 → 外部依赖 → 端到端调用链 → panic/并发 → 错误处理路径 → race → DoS → 分布式 ID。每轮发现递减不等于"挖干净了"——可能只是这一轮角度没覆盖到。
 
 ### 5. Check off acceptance (with evidence)
 - Report acceptance in the final chat handoff after implementation and staged verification stabilize. Create versioned API, integration, or deployment documentation only when it is an explicitly required product deliverable.

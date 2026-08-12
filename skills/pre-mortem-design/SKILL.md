@@ -26,6 +26,8 @@ description: "Use when designing or planning a fix/feature in high-risk domains 
 - 必须持久、不能丢、不能重复的数据写
 - 鉴权 / 授权 / 越权 / 敏感数据
 - 外部系统集成（webhook、Stripe/第三方 API、消息队列、定时任务）——凡是"本地状态要和外部系统对齐"的
+- **Serverless / FC / Lambda 部署**——后台 worker / goroutine / setInterval 不可靠（实例 freeze / recycle），任何"靠 worker 兜底"的链路必须改用 timer + HTTP endpoint
+- **错误响应 / 内部信息泄露**——DB 错误、SQL 片段、连接串、stack trace 直接 surface 到客户端响应
 
 **不在这些域**（纯展示、纯读、单进程无状态工具）——别滥用，直接做。
 
@@ -80,6 +82,36 @@ description: "Use when designing or planning a fix/feature in high-risk domains 
 - **reservation 生命周期**：fresh pending、stale pending、succeeded with pointer、provider failure release、crash after reserve before provider result、crash after provider success before local complete。
 - **provider idempotency key 兼容**：改变 Stripe/第三方幂等 key 格式前，必须考虑已部署版本的重试窗口。pre-deploy 请求可能已经到 provider 但本地未落库；retry 若换 key 会变成第二笔外部操作。
 - **stale 策略**：不能二选一地永久 409 或超时直接删除。支付场景要复用同一个 provider idempotency key、retrieve/reconcile 外部事实，或进入人工复核；不查外部事实的 TTL 释放是风险。
+
+## Serverless / FC 专项检查
+
+部署在阿里云 FC / AWS Lambda / Cloudflare Workers 等 serverless 平台时，plan 必须明确：
+
+- **后台 worker 不可靠**：FC 按量实例无请求时 CPU 冻结；进程内 `go worker.Run()` / `setInterval` / `Timer` 都可能被 freeze 或实例 recycle 中断。**任何"靠 worker 兜底"的 correctness 链都是不可靠的**。
+- **正确架构 = timer + HTTP endpoint**：用平台定时触发器调内部 HTTP endpoint（如 `/internal/cron/reconcile-*`），每次调用即起即收，匹配 serverless 模型。后台 goroutine 仅作开发环境优化，生产由 timer 驱动。
+- **timer endpoint 鉴权**：必须三重鉴权——HMAC-SHA256(timestamp+nonce+body) 用 `hmac.Equal` 常量时间 + timestamp ±5min 窗口（防长期重放）+ nonce 5min 去重（防短期重放）。仅 IP 白名单不可靠（serverless 出口 IP 不固定）。
+- **timer endpoint DoS 防护**：body 用 `http.MaxBytesReader` 限上限（如 4-32KB），否则攻击者发 GB 级伪造请求 OOM 函数。
+- **多实例并发**：FC 可能多实例处理同一 timer event。reconcile 入口必须复用 DB lease 跨实例互斥；rate limiter / nonce cache 仅单实例有效，需明确这是兜底而非唯一防线。
+- **分布式 ID 撞号**：snowflake / uuid-with-nodeid / 自增 counter 等进程本地 ID 生成器在多实例下节点 ID 撞号会生成相同 ID。env 注入实例 ID 或用无协调 UUID。
+- **函数 timeout 预算**：webhook 同步处理总时间（验签 + 主动查单 + 履约）必须 < 平台函数 max duration 且 < webhook 重发阈值。否则 ACK 没发触发重发风暴。
+- **凭证阻塞识别**：sandbox / 测试凭证不可达时，所有"对外部 API 行为"假设（签名算法、字段名、幂等性）必须明确标 P0 阻塞，不冒充验证。单测只证"自洽性"不证"与真实 provider 一致"。
+
+**关键失败模式**（来自 KingLuckyRealtime V2 Onerway 接入）：
+- `RunOnce`（cron 调用）原本无 lease → 多 FC 实例并发 timer 重复查单浪费 provider 配额
+- snowflake 节点 ID 写死 → 多实例撞号导致 merchantTxnId 重复被 provider 拒
+- webhook body 无大小限制 → 攻击者发伪造 webhook（无需通过签名，body 在验签前读）OOM 函数
+- ACK-first vs 同步处理：webhook 重发阈值通常很宽（Onerway 30min），同步处理（含主动查单）只要 < 函数 timeout（FC 通常 60s）就无需 ACK-first
+
+## 错误响应 sanitize 专项检查
+
+handler / service 返回错误时，plan 必须明确：
+
+- **内部错误绝不进响应体**：DB 连接串、SQL 片段、表名、gorm/ORM 内部错误、stack trace 都不能直接 `c.JSON(500, "error": err.Error())`。
+- **sentinel 错误分类**：service 层用 sentinel（`ErrNotFound`/`ErrUnauthorized`/`ErrConflict`/`ErrInternal`）+ `fmt.Errorf("internal: %w", err)` 标记内部错误。
+- **集中 HTTPErrorHandler**：web 框架统一拦截，sentinel 映射 HTTP 状态 + 安全消息；带 "internal:" 前缀的统一返 500 + 通用消息 + requestID。
+- **RequestID 关联**：响应体只返 requestID；服务端日志按 requestID 存完整错误堆栈；客户端报问题提供 requestID 给运维查。
+- **API 响应 envelope**：固定 `{code, message, data, requestId}`，message 来自错误码字典而非 `err.Error()`。
+- **审计现有代码**：`grep -rn "err\.Error()" api/handlers/` 找直接 surface err 的 handler；内部 endpoint（cron / webhook）也审计，"反正内部用"不是借口。
 
 ## 反面例子（真实，来自本项目）
 
