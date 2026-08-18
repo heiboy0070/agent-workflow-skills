@@ -1,6 +1,6 @@
 ---
 name: rigorous-delivery
-description: Use when the user asks to start a substantial refactor, feature, fix, migration, milestone, or implementation slice; not for light Q&A.
+description: Use when the user asks to start, review, validate, or complete a substantial refactor, feature, fix, migration, milestone, or implementation slice; not for light Q&A.
 ---
 
 # Rigorous Delivery
@@ -20,6 +20,7 @@ A discipline for completing substantial tasks with **high accuracy and real proo
 9. **Completed scope + pushed requires a three-round clean review record.** Run the matching PR review gate against the latest commit before saying the accepted scope is done or preparing a PR handoff. The record must identify the exact commit/diff and contain three consecutive qualifying rounds with no new or open P0/P1. Any code, test, configuration, migration, lockfile, generated artifact, or other versioned diff change invalidates the whole streak and resets it to zero. Scope review to the diff and genuinely coupled flows, not the whole repository.
 10. **Bind existing issues; never manufacture one for the workflow.** If the user provides an issue or a clear matching tracker issue already exists, bind the current branch to that issue. If no issue exists, continue with the accepted user request as scope and do not create a tracker issue unless the user explicitly asks. For issue-driven work, keep one issue or explicitly accepted sub-item set per branch/PR. If work reveals a second issue, dependency, or adjacent risk, document it as follow-up and stop before implementing it in the same branch unless the user explicitly approves combining scopes.
 11. **Finish the functional pass before polishing.** After scope and high-risk design are clear, implement the accepted functional surface as one concentrated pass. Do not interrupt every ordinary endpoint to rewrite Markdown, polish prose, or run a full review cycle. Consolidate ordinary regression tests, review, evidence, and the final chat handoff after the functional pass is complete. Critical paths still follow the test policy in step 0.
+12. **A branch-based task ends with a complete PR-ready handoff.** After `3/3`, automatically provide each repository's `base`, `head`, PR title, and full PR body even when the user asked only for implementation, validation, or review. Preparing text is mandatory; creating/opening the PR remains a separate action requiring explicit user authorization and the `creating-pull-requests` workflow.
 
 ## DB & credentials — per project, from env
 
@@ -102,6 +103,7 @@ A substantial task is NOT done when the first round of fixes lands. Run autonomo
 - “P0/P1-clean”表示该轮没有新增 P0/P1，且此前没有未关闭或仅因凭证/外部依赖而搁置的 P0/P1。P2/P3 必须记录、定性和向用户披露；除非用户将其设为阻断，否则它们不打断 streak。
 - 任一轮发现 P0/P1，或三轮期间发生任何版本化变更，立即将 streak 重置为 `0/3`。修复、聚焦验证并确定新最终 commit 后，从 Round 1 重新累计；只重跑发现问题的 slice 不能恢复旧 streak。
 - 每轮在 evidence ledger 记录 round 编号、commit SHA/diff identity、检查角度、命令/运行证据、findings 和 disposition。没有三条同一 identity 的 clean 记录，不得准备 PR handoff、声称 PR-ready 或结束任务。
+- 达到 `3/3` 后，在结束任务的同一回复中输出每个仓库的 `base`、`head`、PR title 和完整 body；不能用“需要我准备 PR 吗？”代替实际 handoff。未经用户明确授权，只准备文本，不创建 PR。
 
 ### 5. Check off acceptance (with evidence)
 - Report acceptance in the final chat handoff after implementation and staged verification stabilize. Create versioned API, integration, or deployment documentation only when it is an explicitly required product deliverable.
@@ -130,6 +132,7 @@ A "done" claim missing any line below is invalid:
 - [ ] data-access/performance evidence recorded when touched paths are runnable
 - [ ] relevant test counts and frontend contract basis recorded; failures include raw output/reference
 - [ ] latest commit passed the reusable three-round PR gate; high-risk changes have one deduplicated 4b-full matrix and no open P0/P1
+- [ ] completion reply includes a separate `base`/`head`/PR title/full body handoff for every branch-based repository
 
 ## Anti-patterns (forbidden)
 - Interrupting every ordinary CRUD/query endpoint for a separate RED/GREEN cycle, progress-document edit, and review pass when no critical-risk trigger applies.
@@ -146,6 +149,7 @@ A "done" claim missing any line below is invalid:
 - Treating the red-team ("扮坏人") pass as optional for high-risk changes because the smoke test passed or the suite is green.
 - Merging normal review and red-team into one superficial pass, or rejecting a finding without evidence.
 - Stopping after one or two clean rounds, reusing a pre-fix review after the diff changed, or relabeling one checklist as three reviews.
+- Ending with a summary or “需要 PR 吗？” instead of the mandatory complete PR-ready handoff.
 - Claiming "no response change, nothing to paste" to skip read-after-write evidence — read-after-write proof is ALWAYS required for any write.
 - Declaring a read path fine without counting the REAL requests — missing an N+1: per-row / per-parent fan-out on the client, or per-item queries on the server. "The code looks efficient" is not evidence; the Network count / query log is.
 - Deleting or losing raw evidence before disputed/failed checks are resolved.
