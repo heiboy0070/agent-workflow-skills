@@ -91,6 +91,16 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Add feature flags for risky behavior when old behavior must continue during deployment.
    - Prefer backward-compatible schema and response changes.
    - For auth/token work, document token ownership, expiry, revocation, and fallback behavior.
+   - Enforce the mandatory user-facing feedback contract below at the API/client boundary; do not defer copy safety to individual components.
+
+### Mandatory user-facing feedback contract
+
+- Treat all non-client-owned feedback and diagnostic text as untrusted internal data, regardless of success/failure status. This includes text returned or thrown by backends, upstream services, proxies, third-party SDKs, browser/native bridges, and realtime channels.
+- No user-facing surface may render, interpolate, forward, or use as a fallback any such text, including nested `message`, `error`, `detail`, `reason`, `title`, `description`, `cause`, `stack`, `statusText`, raw response bodies, exception text, API/SDK-originated `Error.message`, or `err.Error()`. These names are examples, not an allowlist: any diagnostic string not fully owned by the client is prohibited.
+- “User-facing surface” includes pages, field validation, error/empty states, toasts, snackbars, banners, modals, dialogs, drawers, tooltips, notifications, accessibility announcements, redirects/query text, and generated/downloadable user output. Existing passthrough conventions, backend localization or product approval, time pressure, preserving “specific details,” and avoiding a mapping layer are not exceptions.
+- Enforce the contract at every transport and rendering boundary: HTTP/GraphQL/RPC, SSR/RSC/server actions/loaders, BFF/reverse proxies, WebSocket/SSE, third-party SDKs, and browser/native WebView bridges. Normalize feedback into a stable code, status/business state, safe structured metadata, and request/trace ID. Map allowlisted known cases to product-owned, contextual copy or a purpose-built recovery UI such as retry, re-authentication, field correction, or support guidance.
+- For an unknown, missing, malformed, or newly introduced code, show a client-owned context-specific fallback. Never implement `backendMessage ?? fallback`, pass a raw exception into a UI prop/state/store, or reveal raw text because a mapping is absent.
+- Raw diagnostic text may exist only in access-controlled observability or development logs, separate from UI state. Redact secrets, tokens, credentials, and personal data; prefer the stable code and request/trace ID. A log, audit event, session replay, debug console, or realtime log stream that can be read, subscribed to, exported, or displayed by a client is user-facing and must remove raw diagnostics before applying the same mapping contract. Domain content intentionally returned for display is not a substitute channel for feedback or diagnostic messages.
 
 6. Verify with real commands.
    - Start the staged smoke/review/full gate after the accepted functional pass is complete; do not interrupt every ordinary endpoint with a full verification cycle.
@@ -98,6 +108,10 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Keep frontend base URL variables mapped to their real backend roles; do not point unrelated PHP/V2/Node variables to the same address unless explicitly doing a labeled mock-only test.
    - Run focused tests for new behavior.
    - Run build/lint/typecheck for touched services where available.
+   - For any frontend/UI change, derive a complete affected-UI inventory from the diff, route tree, user flow, and responsive variants before browser verification. Give every affected route or materially different UI state its own matrix row; mark non-visual frontend infrastructure changes as “no independent UI” with supporting evidence instead of silently omitting them.
+   - Treat every materially different user-facing feedback state, including success, failure, and realtime events, as an affected-UI row. Inventory every applicable source among HTTP, SSR/BFF, third-party SDK, WebSocket/SSE, and WebView/native bridges. For every touched feedback path and applicable source, inject hostile or sensitive upstream text and add tests proving: known codes produce the exact product-owned copy or recovery UI; unknown/missing/malformed codes produce the contextual fallback; and raw upstream text is absent from the rendered DOM, accessibility tree, toast/notification output, URL, native notification/bridge output, and downloadable output.
+   - Verify every visual row through real interaction in a headed browser. Cover desktop and mobile separately whenever the layout, navigation, copy, target, or control behavior differs. Sampling one page, one state, one viewport, or relying only on unit/snapshot tests does not satisfy UI acceptance.
+   - Capture at least one screenshot for every verified visual row. Record the route/state, viewport, observed result, and screenshot path in the evidence ledger. A visual row without screenshot evidence remains unverified and the UI scope MUST NOT be reported complete.
    - If full suites fail on baseline, document the baseline failures and run scoped tests.
    - If runtime, database, or table prerequisites are missing, record exact unblock steps and acceptance criteria in chat or a temporary file outside the repository.
    - Stop any local dev server, mock API, browser session, or background process started for the test when the test finishes, fails, or is interrupted.
@@ -113,6 +127,7 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Code is not "done" until the required risk-tiered review has passed, or all P0-P2 findings are fixed/re-verified with evidence.
    - Do not invoke another review workflow that automatically delegates. The current-agent normal and adversarial passes are the canonical gate.
    - The review must check regressions, missing permission checks, deployment ordering, table-not-found behavior, token/user mismatch, rollback behavior, data-access/performance risk, and untested paths.
+   - Trace all touched feedback paths—including success, failure, realtime, SSR/BFF, SDK, and bridge paths—from transport to presentation. Search for diagnostic strings, raw bodies, `.message`, `cause`, `stack`, `statusText`, and `err.Error()` entering UI state, props, stores, templates, toasts, notifications, accessibility text, URLs, native bridges, or generated output. Any user-facing passthrough is a blocking P1; exposure of secrets, credentials, tokens, or personal data is P0. A missing source inventory, hostile-text injection test, or required evidence is also an unverified P1. Do not close or ship the accepted scope until it is removed and re-verified.
    - 在支付/退款/状态机/重试等关键业务路径的提案和落地中，要求预先定义最小可用业务日志点：关键入口参数摘要、分支判断/状态迁移、外部网关调用前后、幂等键/乐观锁冲突处理、重试/补偿动作。日志应为结构化、可追溯（如 requestID/traceID/businessID），只打印关键节点，避免热路径高频噪声日志。
    - Fix findings or document residual risks with evidence.
    - Record the selected review radius, findings, dispositions, and evidence in the shared ledger so PR preparation does not repeat the review.
@@ -153,6 +168,8 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
 12. Final report.
    - Include the bound issue when one exists; otherwise name the accepted request/sub-item scope. Also include branches/worktrees, commit hashes, key files, explicitly requested product docs, verification commands and results, blocked tests, deployment safety answer, and remaining manual steps.
    - Include the actual commit count and list each commit hash with its module/function scope. If the branch has 1 commit or more than 5 commits, state the explicit user approval that allowed it.
+   - For frontend/UI scope, include the affected-UI verification matrix with one row per route/state and responsive variant, plus a visible preview or clickable local link for every required screenshot. Explicitly list any row that could not be exercised; do not collapse multiple unverified pages into a generic “browser test passed” statement.
+   - For touched feedback/error paths, include the stable-code-to-copy/UI mapping, unknown-code fallback, automated non-disclosure test result, and screenshot evidence for each visual error state. Explicitly state whether any backend feedback/diagnostic text can still reach a user-facing surface; if that cannot be proven false, do not report the scope complete.
    - List any adjacent issues found but intentionally not implemented.
    - Do not claim full acceptance when SQL, runtime, or real API checks are still blocked.
 
