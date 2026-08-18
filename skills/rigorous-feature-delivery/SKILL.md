@@ -14,8 +14,8 @@ Use this skill to execute large feature, refactor, or migration work end to end.
 - Read/search independent files in parallel through ordinary tools when available, but avoid duplicating context in multiple agents.
 - After scope and critical-risk design are clear, finish one concentrated functional implementation pass before ordinary regression, review, and final user handoff. Keep only critical-path test-first loops inside that pass.
 - Create one evidence ledger per task: command, commit/build identity, concrete data, observed result, and raw-output reference. Reuse it across review, acceptance, and PR preparation while the relevant diff is unchanged.
-- Use risk-tiered depth: low/medium risk gets a combined review checklist; high risk gets separate current-agent normal and adversarial passes plus the sequential `4b-full` matrix.
-- After a narrow fix, rerun only impacted tests and review rows. Rerun the full gate only when the review radius changes.
+- Use risk-tiered per-round depth: low/medium risk may use a combined checklist; high risk gets separate current-agent normal and adversarial work plus the sequential `4b-full` matrix. Every risk tier still requires three consecutive P0/P1-clean rounds on the same final diff/commit.
+- After a fix, run impacted tests first, then reset the clean-review streak to `0/3` and restart all three qualifying rounds on the new final diff. Any versioned code, test, configuration, migration, lockfile, or generated-file change resets the streak even when the review radius is unchanged.
 - Keep user updates and final evidence compact. Include full raw output only for failures, short critical responses, disputed findings, or explicit user requests.
 
 ## Required Skill Chain
@@ -24,9 +24,9 @@ Use this as the default chain for feature/fix work:
 
 1. **Plan/design:** Use `pre-mortem-design` before finalizing plans for payments, state machines, auth, durable data, concurrency, or external integrations.
 2. **Tracker preflight:** First bind an existing tracker issue when the user provides one or a matching issue already exists. If no issue exists, continue with the user's accepted request as the scope boundary. Never create an issue only because this workflow is active; create one only when the user explicitly asks.
-3. **Implement/verify:** Use this skill plus `rigorous-delivery`; follow its risk-tiered test policy, concentrated functional pass, grouped ordinary regression, and final evidence handoff. Its review/red-team gates remain mandatory before calling the accepted scope complete.
-4. **Ready-to-PR gate:** If the accepted scope is considered complete and the branch has been pushed, ensure the `rigorous-delivery` risk-tiered PR gate has run once against the latest pushed commit before asking whether to create a PR. High-risk changes require the current-agent impact-radius matrix (`4b-full`); low/medium-risk changes use one combined pass plus focused tests. Reuse the gate while the reviewed diff is unchanged.
-5. **PR-ready handoff:** 到可提 PR 阶段，先向用户输出：`base` 分支、`head` 分支、PR 标题、PR 正文。必须得到用户确认后再进入 `creating-pull-requests` 流程。
+3. **Implement/verify:** Use this skill plus `rigorous-delivery`; follow its test policy, concentrated functional pass, grouped ordinary regression, three-round clean-review gate, and final evidence handoff. Its review/red-team gates remain mandatory before calling the accepted scope complete.
+4. **Ready-to-PR gate:** Freeze each repository's final diff/commit and complete the `rigorous-delivery` gate as three sequential, consecutive review rounds with no new or open P0/P1 against that exact identity. Round N+1 starts only after Round N is recorded; parallel or duplicated reviews do not form a streak. High-risk changes require the current-agent impact-radius matrix (`4b-full`) within the applicable rounds; low/medium-risk changes use three distinct combined-impact rounds. A change after any round resets that repository to `0/3`; if it changes a shared contract or coupled behavior, reset every affected repository's streak.
+5. **PR-ready handoff:** Reaching `3/3` automatically requires outputting, for every branch/repository: `base` branch, `head` branch, PR title, and complete PR body. Do this even when the user asked only to implement, fix, validate, or review and did not separately request a PR. Preparing this handoff is not PR creation; obtain user confirmation before entering `creating-pull-requests`.
 6. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
 6. **Cleanup:** After the PR exists, clean up worktree directories created for the task so they do not accumulate.
 
@@ -123,14 +123,14 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
 
 8. Review and red-team before completion.
    - Invoke `rigorous-delivery` for this gate and follow its current-agent review checklists.
-   - State the risk tier. High-risk changes require separate normal and adversarial passes by the current agent; low/medium-risk changes use one combined impact pass unless the user asks for more.
-   - Code is not "done" until the required risk-tiered review has passed, or all P0-P2 findings are fixed/re-verified with evidence.
+   - State the risk tier. It controls each round's depth, not the exit count: every tier and every repository requires three sequential P0/P1-clean rounds against its same final identity. High-risk rounds include separate normal/adversarial work; low/medium-risk rounds may use distinct combined-impact checklists.
+   - Code is not "done" until the exact final diff/commit has a `3/3` record and every P0/P1 is fixed/re-verified with evidence. Record and surface P2/P3; they do not block unless the user makes them blocking or they affect safety/security/data integrity.
    - Do not invoke another review workflow that automatically delegates. The current-agent normal and adversarial passes are the canonical gate.
    - The review must check regressions, missing permission checks, deployment ordering, table-not-found behavior, token/user mismatch, rollback behavior, data-access/performance risk, and untested paths.
    - Trace all touched feedback paths—including success, failure, realtime, SSR/BFF, SDK, and bridge paths—from transport to presentation. Search for diagnostic strings, raw bodies, `.message`, `cause`, `stack`, `statusText`, and `err.Error()` entering UI state, props, stores, templates, toasts, notifications, accessibility text, URLs, native bridges, or generated output. Any user-facing passthrough is a blocking P1; exposure of secrets, credentials, tokens, or personal data is P0. A missing source inventory, hostile-text injection test, or required evidence is also an unverified P1. Do not close or ship the accepted scope until it is removed and re-verified.
    - 在支付/退款/状态机/重试等关键业务路径的提案和落地中，要求预先定义最小可用业务日志点：关键入口参数摘要、分支判断/状态迁移、外部网关调用前后、幂等键/乐观锁冲突处理、重试/补偿动作。日志应为结构化、可追溯（如 requestID/traceID/businessID），只打印关键节点，避免热路径高频噪声日志。
    - Fix findings or document residual risks with evidence.
-   - Record the selected review radius, findings, dispositions, and evidence in the shared ledger so PR preparation does not repeat the review.
+   - Record each round's number, commit SHA/diff identity, independent angle, selected radius, findings, dispositions, and evidence in the shared ledger. Any versioned change resets the record to `0/3`; PR preparation may reuse only a complete `3/3` record for the unchanged final identity.
 
 9. Commit by functional slice.
    - For substantial work, create commits by module/functional slice. Target 2-5 commits whether the scope comes from a bound issue or an accepted untracked request.
@@ -155,13 +155,13 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
 10. Push and PR readiness.
    - Before pushing, rerun `scripts/validate-branch-name.sh "$(git branch --show-current)"`. A rejected branch MUST be renamed and rechecked before any push or PR handoff.
    - Run `scripts/validate-workflow-artifacts.sh <base> [head]`. Remove every rejected workflow Markdown file from the commit/PR unless the user or repository explicitly required that exact versioned document; record that exception in the PR handoff.
-   - Push only after focused tests, full relevant tests, required risk-tiered review, and re-verification are complete.
-   - If you believe the accepted scope is complete after push, ensure the `rigorous-delivery` risk-tiered PR gate has run against the latest pushed commit and consolidate the findings before asking the user whether to create a PR.
-   - Do not ask "要不要提 PR / 可以提 PR 了吗" until the required PR gate has no open P0/P1 and P2/P3 are either fixed or explicitly surfaced to the user for triage.
-   - Treat this as the single PR-readiness gate. When `creating-pull-requests` runs later, it should verify this gate was already satisfied, not repeat it, unless commits changed after the review.
+   - Push only the frozen commit that passed focused/full tests and the three-round clean-review gate. After push, confirm the remote head SHA exactly matches the reviewed SHA; a push containing a different commit resets the gate.
+   - Do not ask "要不要提 PR / 可以提 PR 了吗" before the exact final identity has `3/3`, no open P0/P1, and P2/P3 are explicitly surfaced for triage.
+   - Treat the `3/3` ledger as the single PR-readiness record. When `creating-pull-requests` runs later, it verifies this record instead of repeating it, unless any commit or diff changed after review.
 
 11. PR and cleanup.
-   - If the user asks to create/open/submit a PR, first output PR-ready handoff（`base` + `head` + title + body）并等待用户确认，然后切到 `creating-pull-requests`，执行其后续步骤。
+   - Before ending every branch-based feature/fix/review task, automatically output a separate PR-ready handoff for each repository (`base` + `head` + title + complete body), even when the user has not asked to create a PR. A summary, test report, or “ready when you are” question without this payload is an incomplete workflow.
+   - If the user asks to create/open/submit a PR, use the already-delivered handoff, wait for explicit confirmation, then switch to `creating-pull-requests`; do not hand-roll creation.
    - After the PR is created, remove worktree directories created for this task using safe git worktree cleanup (`git worktree remove <path>` when possible), and verify `git worktree list` no longer shows stale task worktrees.
    - Never remove the user's original repo or unrelated worktrees.
 
@@ -170,6 +170,8 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Include the actual commit count and list each commit hash with its module/function scope. If the branch has 1 commit or more than 5 commits, state the explicit user approval that allowed it.
    - For frontend/UI scope, include the affected-UI verification matrix with one row per route/state and responsive variant, plus a visible preview or clickable local link for every required screenshot. Explicitly list any row that could not be exercised; do not collapse multiple unverified pages into a generic “browser test passed” statement.
    - For touched feedback/error paths, include the stable-code-to-copy/UI mapping, unknown-code fallback, automated non-disclosure test result, and screenshot evidence for each visual error state. Explicitly state whether any backend feedback/diagnostic text can still reach a user-facing surface; if that cannot be proven false, do not report the scope complete.
+   - Include a three-row review ledger summary per repository: round, exact commit/diff identity, independent angle, P0 count, P1 count, and evidence reference. Anything below `3/3`, any mixed commit identities, or any open P0/P1 means the task remains in progress.
+   - End with the complete PR-ready handoff for every branch: `base`, `head`, title, and body containing summary, verification, screenshots/UI matrix when applicable, rollout/deployment notes, and disclosed P2/P3. Do not wait for the user to ask for this payload.
    - List any adjacent issues found but intentionally not implemented.
    - Do not claim full acceptance when SQL, runtime, or real API checks are still blocked.
 
