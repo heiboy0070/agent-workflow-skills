@@ -170,7 +170,7 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - For frontend/UI scope, include the affected-UI verification matrix with one row per route/state and responsive variant, plus a visible preview or clickable local link for every required screenshot. Explicitly list any row that could not be exercised; do not collapse multiple unverified pages into a generic “browser test passed” statement.
    - For touched feedback/error paths, include the stable-code-to-copy/UI mapping, unknown-code fallback, automated non-disclosure test result, and screenshot evidence for each visual error state. Explicitly state whether any backend feedback/diagnostic text can still reach a user-facing surface; if that cannot be proven false, do not report the scope complete.
    - Include a three-row review ledger summary per repository: round, exact commit/diff identity, independent angle, P0 count, P1 count, and evidence reference. Anything below `3/3`, any mixed commit identities, or any open P0/P1 means the task remains in progress.
-   - End with the complete PR-ready handoff for every branch: `base`, `head`, title, and body containing summary, verification, screenshots/UI matrix when applicable, rollout/deployment notes, and disclosed P2/P3. Do not wait for the user to ask for this payload.
+   - When the user has NOT asked for a PR, end with the readiness state only (branch, commit SHA, `3/3` gate status, disclosed P2/P3) — do not inline the full PR payload; wait for the user to request creation.
    - List any adjacent issues found but intentionally not implemented.
    - Do not claim full acceptance when SQL, runtime, or real API checks are still blocked.
 
