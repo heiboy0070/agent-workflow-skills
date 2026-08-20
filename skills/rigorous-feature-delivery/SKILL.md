@@ -26,8 +26,7 @@ Use this as the default chain for feature/fix work:
 2. **Tracker preflight:** First bind an existing tracker issue when the user provides one or a matching issue already exists. If no issue exists, continue with the user's accepted request as the scope boundary. Never create an issue only because this workflow is active; create one only when the user explicitly asks.
 3. **Implement/verify:** Use this skill plus `rigorous-delivery`; follow its test policy, concentrated functional pass, grouped ordinary regression, three-round clean-review gate, and final evidence handoff. Its review/red-team gates remain mandatory before calling the accepted scope complete.
 4. **Ready-to-PR gate:** Freeze each repository's final diff/commit and complete the `rigorous-delivery` gate as three sequential, consecutive review rounds with no new or open P0/P1 against that exact identity. Round N+1 starts only after Round N is recorded; parallel or duplicated reviews do not form a streak. High-risk changes require the current-agent impact-radius matrix (`4b-full`) within the applicable rounds; low/medium-risk changes use three distinct combined-impact rounds. A change after any round resets that repository to `0/3`; if it changes a shared contract or coupled behavior, reset every affected repository's streak.
-5. **PR-ready handoff:** Reaching `3/3` automatically requires outputting, for every branch/repository: `base` branch, `head` branch, PR title, and complete PR body. Do this even when the user asked only to implement, fix, validate, or review and did not separately request a PR. Preparing this handoff is not PR creation; obtain user confirmation before entering `creating-pull-requests`.
-6. **PR creation:** If the user wants a PR, use `creating-pull-requests`; do not hand-roll PR creation.
+5. **PR creation (no handoff pause):** Reaching `3/3` completes the PR-readiness gate. When the user asks to create/submit a PR, that instruction is the authorization — invoke `creating-pull-requests` directly, generate the body from its template, and create the PR; show the link plus full body in chat after (or in the same turn) for review. Do NOT insert a separate "output PR material and wait for confirmation" round-trip. When the user has NOT asked for a PR, do not force PR material into the final report — name the readiness state and let the user decide.
 6. **Cleanup:** After the PR exists, clean up worktree directories created for the task so they do not accumulate.
 
 ## Issue Scope Binding
@@ -153,15 +152,15 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Mention verification or deployment-safety details in commit bodies when useful.
 
 10. Push and PR readiness.
-   - Before pushing, rerun `scripts/validate-branch-name.sh "$(git branch --show-current)"`. A rejected branch MUST be renamed and rechecked before any push or PR handoff.
-   - Run `scripts/validate-workflow-artifacts.sh <base> [head]`. Remove every rejected workflow Markdown file from the commit/PR unless the user or repository explicitly required that exact versioned document; record that exception in the PR handoff.
+   - Before pushing, rerun `scripts/validate-branch-name.sh "$(git branch --show-current)"`. A rejected branch MUST be renamed and rechecked before any push or PR creation.
+   - Run `scripts/validate-workflow-artifacts.sh <base> [head]`. Remove every rejected workflow Markdown file from the commit/PR unless the user or repository explicitly required that exact versioned document; record that exception in the post-create body shown in chat.
    - Push only the frozen commit that passed focused/full tests and the three-round clean-review gate. After push, confirm the remote head SHA exactly matches the reviewed SHA; a push containing a different commit resets the gate.
    - Do not ask "要不要提 PR / 可以提 PR 了吗" before the exact final identity has `3/3`, no open P0/P1, and P2/P3 are explicitly surfaced for triage.
    - Treat the `3/3` ledger as the single PR-readiness record. When `creating-pull-requests` runs later, it verifies this record instead of repeating it, unless any commit or diff changed after review.
 
 11. PR and cleanup.
-   - Before ending every branch-based feature/fix/review task, automatically output a separate PR-ready handoff for each repository (`base` + `head` + title + complete body), even when the user has not asked to create a PR. A summary, test report, or “ready when you are” question without this payload is an incomplete workflow.
-   - If the user asks to create/open/submit a PR, use the already-delivered handoff, wait for explicit confirmation, then switch to `creating-pull-requests`; do not hand-roll creation.
+   - If the user asks to create/open/submit a PR, invoke `creating-pull-requests` directly (base 分支由用户指令指定；模板 body 生成后直接创建，不设事前 handoff 停顿); do not hand-roll creation.
+   - When no PR was requested, the final report only states the readiness identity (branch, commit SHA, `3/3` gate status) — it does not inline a full PR payload.
    - After the PR is created, remove worktree directories created for this task using safe git worktree cleanup (`git worktree remove <path>` when possible), and verify `git worktree list` no longer shows stale task worktrees.
    - Never remove the user's original repo or unrelated worktrees.
 
