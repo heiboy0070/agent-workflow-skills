@@ -83,6 +83,17 @@ description: "Use when designing or planning a fix/feature in high-risk domains 
 - **provider idempotency key 兼容**：改变 Stripe/第三方幂等 key 格式前，必须考虑已部署版本的重试窗口。pre-deploy 请求可能已经到 provider 但本地未落库；retry 若换 key 会变成第二笔外部操作。
 - **stale 策略**：不能二选一地永久 409 或超时直接删除。支付场景要复用同一个 provider idempotency key、retrieve/reconcile 外部事实，或进入人工复核；不查外部事实的 TTL 释放是风险。
 
+## 跨地域数据库专项检查
+
+应用与数据库跨地域且方案新增或合并持久化结构时，plan 必须以在线路径 SQL RTT 和数据职责为依据：
+
+- **表数不是性能指标**：性能判断看每个在线请求新增的串行 SQL 网络往返、事务和锁等待；不能用“表更多/更少”直接推导延迟改善或退化。
+- **新表影响矩阵**：每张新表一行，列出生命周期、所有权、预估基数、运行时读写方、访问频率、是否位于在线请求路径、每请求新增串行 SQL 轮次、锁范围、索引与清理/归档策略，以及复用现有表或部署/迁移流程的替代方案。
+- **一次性状态不进热路径**：迁移状态、`READY` 标记和一次性校验优先由部署、迁移或 CI 承担；无运行时安全理由不得新增热路径查询。
+- **持久化必须有理由**：新持久表至少要服务于审计、崩溃恢复、并发协调或运行时安全之一；否则优先改部署流程或使用短生命周期产物。
+- **合并也要算成本**：合并表必须评估锁竞争、索引膨胀和生命周期耦合，不能把“少一张表”当成天然优化。
+- **JSON 有硬边界**：需要独立查询、唯一约束、CAS/事务或支付审计的核心状态不得塞进 JSON；JSON 只承载不参与这些一致性约束的附属数据。
+
 ## Serverless / FC 专项检查
 
 部署在阿里云 FC / AWS Lambda / Cloudflare Workers 等 serverless 平台时，plan 必须明确：
@@ -90,6 +101,7 @@ description: "Use when designing or planning a fix/feature in high-risk domains 
 - **后台 worker 不可靠**：FC 按量实例无请求时 CPU 冻结；进程内 `go worker.Run()` / `setInterval` / `Timer` 都可能被 freeze 或实例 recycle 中断。**任何"靠 worker 兜底"的 correctness 链都是不可靠的**。
 - **正确架构 = timer + HTTP endpoint**：用平台定时触发器调内部 HTTP endpoint（如 `/internal/cron/reconcile-*`），每次调用即起即收，匹配 serverless 模型。后台 goroutine 仅作开发环境优化，生产由 timer 驱动。
 - **timer endpoint 鉴权**：必须三重鉴权——HMAC-SHA256(timestamp+nonce+body) 用 `hmac.Equal` 常量时间 + timestamp ±5min 窗口（防长期重放）+ nonce 5min 去重（防短期重放）。仅 IP 白名单不可靠（serverless 出口 IP 不固定）。
+- **配置面最小化（少造新 env/secret）⭐**：新增 timer/endpoint 时，HMAC secret、签名函数、nonce 缓存、lease 模式**必须优先复用既有设施**（同一 secret 盖多个 endpoint，nonce 缓存跨 endpoint 共享反而更安全）。新增**必需**环境变量/密钥/控制台配置，必须在方案里显式论证"为何无法复用"；缺省答案是**零新增**。配置项是部署失误乘数：每个必需项漏配 = fatal 或 fail-open 一次事故，且运维要在更多地方找配置。端点可以按"节奏 × 灰度状态 × 爆炸半径"拆（稳态与 DRY_RUN 观察期不合并），但**管理面**（secret/鉴权/签名设施）必须收敛。
 - **timer endpoint DoS 防护**：body 用 `http.MaxBytesReader` 限上限（如 4-32KB），否则攻击者发 GB 级伪造请求 OOM 函数。
 - **多实例并发**：FC 可能多实例处理同一 timer event。reconcile 入口必须复用 DB lease 跨实例互斥；rate limiter / nonce cache 仅单实例有效，需明确这是兜底而非唯一防线。
 - **分布式 ID 撞号**：snowflake / uuid-with-nodeid / 自增 counter 等进程本地 ID 生成器在多实例下节点 ID 撞号会生成相同 ID。env 注入实例 ID 或用无协调 UUID。
@@ -177,6 +189,8 @@ handler / service 返回错误时，plan 必须明确：
 | "已经配了 idleTimeout/TTL，资源会自己回收" | 参数可能有额外启用条件；必须核对依赖版本、源码和真实监控曲线。 |
 | "SDK close 最终会回调" | 回调永不返回就是必须设计的失败分支；稀缺资源要有本地超时和租约 force-expire。 |
 | "为了不影响体验，所有旧连接先保留" | 没有容量上界的“体验保护”会拖垮全体用户；应保留合理多设备空间，并对超额旧代做有证据的淘汰。 |
+| "新功能配新 env / 新 secret，各管各的更清晰" | 配置面是部署失误乘数：漏配一个 = fatal 或 fail-open。secret/签名/lease 等管理设施必须复用收敛；新增必需项默认零，要加先论证复用不可行。 |
+| "跨地域慢是因为表太多，赶进度先都塞进一个 JSON" | 表数不决定请求 RTT；应比较在线路径的串行 SQL 轮次和数据职责。JSON 会丢掉查询、唯一约束、CAS/事务与支付审计能力。 |
 
 ## 红旗清单（出现就停，回去做 pre-mortem）
 
@@ -191,6 +205,8 @@ handler / service 返回错误时，plan 必须明确：
 - 稀缺资源释放排在日志/数据库/告警之后，或依赖一个可能永不回调的 SDK callback
 - 只配置 timeout/TTL/limit，没有验证当前依赖版本中使其生效的条件
 - 计划写了“可灰度”，却没有指标、停止阈值、最小回滚提交和用户体验预算
+- 方案顺手新增 env / secret / 控制台配置，却没先问"既有配置（共享 secret、既有开关）能否复用"
+- 用表数量判断跨地域性能，或把需要查询、唯一约束、CAS/事务、支付审计的核心状态机械合并进 JSON
 
 **以上任一出现 → 停，回十维表；状态/支付至少补第 1/3/5/6 维，实时资源至少补第 1/8/9/10 维再下笔。**
 
