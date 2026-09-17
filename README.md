@@ -68,6 +68,48 @@ ln -sfn "$PWD/skills/writing-integration-docs" ~/.claude/skills/writing-integrat
 
 After installation, update skill contents in this repository. The local agent directories should remain symlinks.
 
+## Auto-Trigger Enforcement for Claude(自动触发强制层)
+
+让 Claude Code 收到 **substantial 的 fix/feature/refactor/migration/建 PR** 任务时**自动**进入上面的工作流,而不必每次手动报 skill 名字。装好 skill 软链后,再加两层强制注入 + 一层去噪。
+
+约定 `CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"`(普通安装即 `~/.claude`;cac 等多环境工具取该环境的 `.claude`)。
+
+**① `UserPromptSubmit` hook** — 合并进 `$CFG/settings.json` 的 `hooks` 对象(**勿整体覆盖已有 hooks**):
+
+```json
+"UserPromptSubmit": [
+  {
+    "hooks": [
+      {
+        "type": "command",
+        "command": "printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[工作流门禁] 本请求若属 substantial 的 fix/feature/refactor/migration 或建 PR:动代码/git 前先 classify,再用 Skill 工具调起对应工作流——单仓改动用 rigorous-delivery,多仓特性用 rigorous-feature-delivery,高风险(鉴权/并发/支付/状态机/外部集成)先 pre-mortem-design,建 PR 用 creating-pull-requests。功能验证只认真实 API 证据(read-after-write),单测/读代码/tsc 都不算功能验证。轻量问答可忽略本条。\"}}'"
+      }
+    ]
+  }
+]
+```
+
+校验:`jq -e '.hooks.UserPromptSubmit[-1].hooks[0].command' "$CFG/settings.json"` 应打印命令;
+`CMD=$(jq -r '.hooks.UserPromptSubmit[-1].hooks[0].command' "$CFG/settings.json"); echo '{}' | bash -c "$CMD" | jq -r '.hookSpecificOutput.additionalContext'` 应打印门禁文本。
+
+**② 全局 `CLAUDE.md`** 靠前加一条最高优先级规则(冗余保险):
+
+```markdown
+# ⚠️ 工作流门禁(最高优先级,先于一切默认行为)
+substantial 的 fix/feature/refactor/migration/建 PR:动代码或 git 前先 classify,再用 Skill 调起——
+单仓 `rigorous-delivery`;多仓特性 `rigorous-feature-delivery`;高风险(鉴权/并发/支付/状态机/外部集成)先 `pre-mortem-design`;
+建 PR `creating-pull-requests`;写对接文档 `writing-integration-docs`。
+功能验证只认真实 API 证据(read-after-write),单测/读代码/tsc 都不算。主动调 skill,勿等用户报名字。
+```
+
+**③(建议)停用会抢锚点的插件** —— 某些插件(如 superpowers)在 SessionStart 硬注入大段框架,会把项目工作流挤出视野:
+
+```bash
+claude plugin disable superpowers@claude-plugins-official   # 确认后其它插件仍 enabled
+```
+
+> hook / `CLAUDE.md` 改动在**新会话**或打开一次 `/hooks` 菜单后生效(settings 监听器只监听会话启动时已有 settings 的目录)。
+
 ## Token-Efficient Defaults
 
 The delivery skills keep one agent responsible for planning, implementation, review, red-team, and verification. They do not automatically create subagents; delegation happens only when the user explicitly requests it for the current task.
