@@ -76,10 +76,12 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
 4. Treat database changes as reviewable artifacts.
    - Never execute production or project SQL unless the user explicitly asks and approves.
    - Add migration or SQL files with clear comments and execution notes.
-   - Before creating a follow-up migration, determine whether the existing feature migration has reached production or another shared immutable environment.
-   - If the feature migration has not reached production, keep one complete schema entry: add every required table, column, index, backfill, and compatibility guard to that original migration. If a development or personal test database may have executed an earlier revision, append database-version-compatible idempotent ALTER/backfill statements to the end of the same file so both a clean production database and the partially migrated test database can execute that one file safely.
-   - Create a new follow-up migration only after the original migration has reached production/shared immutable state or repository policy forbids editing applied migrations. Do not scatter required DDL across chat, PR text, deployment documents, or multiple SQL files merely because a personal test database ran an earlier draft.
-   - Verify both paths before handoff: clean database executes the complete migration; earlier-revision database executes the updated file without duplicate-column/table failures. Compare every table/column/index referenced by the code against the migration artifact.
+   - For every new persistent table, complete the `pre-mortem-design` **新表影响矩阵**; a missing field or an unjustified runtime table blocks implementation.
+   - Before changing an online database path, record the affected endpoint/worker's before-and-after ordered SQL list, serial SQL round-trip count, transaction boundaries, and cross-region RTT additions. Migration state, `READY`, and one-time validation must stay in deployment/migration/CI unless a documented runtime-safety reason requires the hot-path access.
+   - Any cross-region performance claim requires query logs or a reproducible measurement. Record the p50/p95/p99 measurement plan and status (measured or `待测试环境测量`), `EXPLAIN`/index evidence, concurrency assumptions, and connection-pool upper bound. Local development does not require real production metrics, but pending evidence cannot be reported as a performance improvement.
+   - **One module = one cumulative schema file（用户策略，覆盖原两分支规则）**：同属一个模块的全部表/列/索引必须收敛在同一个模块 schema 文件里（如 `create_billing_reservations.sql` 盖住整个计费/支付模块），**无论原迁移是否已上生产**。对该文件的后续变更一律：① 把新列/索引同步进对应 `CREATE TABLE IF NOT EXISTS` 定义（全新库路径）；② 在文件末尾追加 information_schema 守卫的幂等 ALTER/BACKFILL 块（存量库路径）。禁止为同模块 schema 变更新建独立 alter 文件，也禁止把模块 DDL 散落到多个文件、聊天记录、PR 正文或部署文档里。
+   - 例外：仓库已有明确的多文件迁移版本化机制（如 golang-migrate 版本表）且策略禁止改已应用版本文件时，遵循仓库机制新建版本化迁移，但新文件仍须按模块命名归组。
+   - Verify both paths before handoff: clean database executes the complete file (CREATE includes new columns, guards no-op); earlier-revision database re-executes the same file without duplicate-column/table failures (guards skip). Compare every table/column/index referenced by the code against the migration artifact, and keep the guarded ALTER's AFTER anchor and definition byte-consistent with the CREATE TABLE column.
    - Document which tests remain blocked until SQL is manually reviewed and executed.
 
 5. Implement in reviewable slices.
@@ -87,7 +89,9 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Complete related ordinary CRUD/query/mapping interfaces in one concentrated functional pass, then add grouped regression/contract coverage.
    - Use test-first implementation only for the critical behaviors classified by `rigorous-delivery`, including state machines, concurrency/idempotency, auth, durable mutation, external callbacks/retries, security-sensitive validation, client-blocking contracts, and reproduced defects.
    - Follow existing code patterns and keep unrelated refactors out.
-   - Add feature flags for risky behavior when old behavior must continue during deployment.
+   - Do not mechanically add environment/config feature flags to a purely additive, backward-compatible capability when old clients omit the new optional field and the old path remains unchanged. In that case, keep the backend capability available and let the product/client decide whether to expose it.
+   - Add a feature flag only for a concrete operational need, such as changing existing behavior, billing or availability semantics, durable data mutation/migration, external capacity or cost exposure, irreversible actions, staged traffic, or independent rollback.
+   - Before adding a feature flag, record the old-path impact, flag-off and flag-on behavior, owner, expiry/removal condition, and rollback purpose. If no concrete risk justifies it, omit the flag.
    - Prefer backward-compatible schema and response changes.
    - For auth/token work, document token ownership, expiry, revocation, and fallback behavior.
    - Enforce the mandatory user-facing feedback contract below at the API/client boundary; do not defer copy safety to individual components.
@@ -100,9 +104,13 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
 - Enforce the contract at every transport and rendering boundary: HTTP/GraphQL/RPC, SSR/RSC/server actions/loaders, BFF/reverse proxies, WebSocket/SSE, third-party SDKs, and browser/native WebView bridges. Normalize feedback into a stable code, status/business state, safe structured metadata, and request/trace ID. Map allowlisted known cases to product-owned, contextual copy or a purpose-built recovery UI such as retry, re-authentication, field correction, or support guidance.
 - For an unknown, missing, malformed, or newly introduced code, show a client-owned context-specific fallback. Never implement `backendMessage ?? fallback`, pass a raw exception into a UI prop/state/store, or reveal raw text because a mapping is absent.
 - Raw diagnostic text may exist only in access-controlled observability or development logs, separate from UI state. Redact secrets, tokens, credentials, and personal data; prefer the stable code and request/trace ID. A log, audit event, session replay, debug console, or realtime log stream that can be read, subscribed to, exported, or displayed by a client is user-facing and must remove raw diagnostics before applying the same mapping contract. Domain content intentionally returned for display is not a substitute channel for feedback or diagnostic messages.
+- **First-party copy is not exempt: no internal terminology in any user-visible string.** The ban also covers text your own team authored — server-side `errorCode`→message mappings, client toasts/labels/validation copy, CLI output shown to end users, notification text, and integration docs that clients copy verbatim. Such copy MUST NOT leak implementation vocabulary: internal state/segment/status names, enum or flag values, table/column/index names, scheduler or quota mechanics, cycle/window/batch internals, provider/adapter/SDK names, migration or "legacy/historical data" bookkeeping, retry/lease/idempotency jargon, or numeric implementation parameters (e.g. hours, TTLs, counts) that the user cannot act on. Write the user's situation in their domain language, then give the next actionable step; if the honest action is "contact support," confirm that a real support path exists, otherwise state the limitation without promising a capability. Examples of blocking defects: `会员当前周期不是标准 720 小时排期（历史会员）`, `报价复用失败: quote status=ORDERED`, `lease_until 未释放，请重试`.
+- Enforce this on every touched copy path: read the exact final string a user would see for each code/branch (including the ones you only reworded), record it in the stable-code-to-copy table, and add or update an assertion on the exact expected copy — a test that only checks the error code does not satisfy this rule.
 
 6. Verify with real commands.
    - Start the staged smoke/review/full gate after the accepted functional pass is complete; do not interrupt every ordinary endpoint with a full verification cycle.
+   - **后端/worker/CLI 改动必须本地起真实程序 + 本地数据库调真实接口**（`creating-pull-requests` 铁律 12）：建一次性库、跑迁移、灌最小数据行、启动二进制、调用真实接口、检查库里的真实数据行。单元测试与绿色套件**不是**验收。修复类要给出 base 版本的**修复前后对照**，并配**判别性对照**（已注册路由 200 vs 未注册路径 404）——鉴权中间件常在路由之前执行，未鉴权时同类路径可能返回完全相同的响应，不能作为"路由是否存在"的证据。触达不到的层面要在交付里明说。
+   - **动手前先证明目标代码路径可达**（铁律 13）：确认存在非测试调用方，并确认**当前部署的 SHA** 实际调用的是哪个函数。修不可达代码是无用功。
    - Before starting local services, state each port and which backend it represents.
    - Keep frontend base URL variables mapped to their real backend roles; do not point unrelated PHP/V2/Node variables to the same address unless explicitly doing a labeled mock-only test.
    - Run focused tests for new behavior.
@@ -178,10 +186,10 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
 
 Before saying the service can keep running during deployment, verify and document:
 
-- New behavior is behind a feature flag or falls back to old behavior.
+- Risky new behavior is behind a justified feature flag; purely additive behavior may ship without one only when old clients omit the new field and the old path remains unchanged.
 - Missing new tables do not break old authentication or old pages.
 - SQL is not required before deploying code unless that is explicitly accepted.
-- Turning off the flag disables the risky new path.
+- When a flag is justified, turning it off disables the risky new path and its owner/removal condition is documented.
 - Rollback can be done per repo or per commit.
 - Manual SQL execution has backup and review requirements.
 - Smoke tests cover both flag-off old behavior and flag-on new behavior.
