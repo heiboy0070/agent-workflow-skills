@@ -26,6 +26,11 @@ Opening a PR is the LAST step, not a verification step. A change reaches "ready 
 8. **Clean task worktrees after PR creation.** Once the PR is successfully created, remove worktree directories created for this task with safe git worktree cleanup. Never remove the user's original repo or unrelated worktrees. If cleanup is blocked, report the exact path and reason.
 9. **Commit structure must follow module/function slices.** Before creating the PR, show the commit count and commit list. For substantial work, the branch should normally have 2-5 commits split by DB/schema, core service logic, API/WS contract, tests, explicitly required product docs, or review-fix slices as applicable. Workflow Markdown never counts as a commit slice. If there is exactly 1 commit for substantial work, or more than 5 commits, stop and get explicit user approval or restructure the commits before PR creation.
 10. **The PR body starts with three deployment slots in this exact order:** `上线前必须配置的环境变量` → `部署/开关顺序` → `注意事项与适用边界`. Keep them above the overview so a deployer cannot miss them. Every slot is present even when not applicable; write `无新增必需项` or `无特殊顺序` instead of deleting it. Environment variables list name, required/optional status, value shape/source, and failure behavior without exposing secret values. Deployment order names migrations, code deploy, dependency/worker enablement, smoke checks, and traffic/feature-flag enablement when applicable. Notes contain operational cautions and verified scope boundaries; unresolved bugs/follow-ups still go to the user in chat under Iron rule 6.
+11. **合并方式必须让 PR 编号留在 base 分支上，且"合并内容 = 评审内容"要用 tree 指纹证明。** 合并前先看仓库允许哪些合并方式（`gh api repos/<owner>/<repo> --jq '{allow_merge_commit,allow_squash_merge,allow_rebase_merge}'`）：
+    - **禁止 Rebase and merge**：它重写 SHA 且不产生 merge commit，`git log <base>` 里既看不到 `#N` 也看不到原分支 SHA，PR 与代码历史的线索直接断裂（真实事故：PR 合并后 main 上查不到 PR 编号）。仓库若开启该选项，先关掉（`gh api -X PATCH repos/<owner>/<repo> -f allow_rebase_merge=false`）或明确要求改用下面两种。
+    - 统一用 **Squash**（提交主题带 `(#N)`，代价是丢掉分支内的提交切片）或 **Create a merge commit**（`Merge pull request #N from …`，保留切片）。选择要与该仓库既有历史一致。
+    - 合并后**回读校验**：`git log --oneline origin/<base> | head` 必须能看到 `#N`；看不到就补记（isstracker 评论 + `git notes add`）。
+    - **身份对齐**：Squash/Rebase 会改 SHA，所以"评审过的 head"与"合并后的提交"本来就不是同一个 SHA。合并后必须比对 **tree 指纹**：`git rev-parse origin/<base>^{tree}` == 评审台账里记录的 tree；相等即证明合并内容未跑偏。只比 SHA 会把正常合并误判成"未评审版本"。
 
 ## Process
 0. **Review gate** (see **Gate** above): confirm the latest commit passed the matching current-agent risk-tiered PR gate, with no open P0/P1. If it ran on the same diff, cite the shared evidence ledger and continue; if relevant code changed, rerun only affected rows unless the review radius changed.
@@ -43,6 +48,7 @@ Opening a PR is the LAST step, not a verification step. A change reaches "ready 
 4. **Draft the PR body** using the template below; verification as named-data → endpoint → seen-result (Iron rule 3). The body must include the three mandatory top sections in Iron rule 10, populated from the actual diff/config/deploy plan rather than placeholders.
 5. **Surface follow-ups to the user, NOT into the body** (Iron rule 6): if the work / a review found unfixed issues or deferred decisions, list them in chat with a recommendation and ask whether to open issues; do not block PR creation on their answer.
 6. **Push** the branch, then `gh pr create --base <user-specified> --head <branch> --title "..." --body-file <file>`. Show the created PR link together with the full body in chat for post-create review (Iron rule 2).
+6b. **合并方式与合并后校验**（Iron rule 11）：按仓库既有历史选 Squash 或 Merge commit，禁止 Rebase；合并完成后回读 `git log --oneline origin/<base>` 确认 `#N` 可见，并用 tree 指纹确认"合并内容 = 评审内容"，然后把「PR 链接 + 合并 commit + tree 指纹」回填到 isstracker 评论。
 7. **Post-PR cleanup** (Iron rule 8): run `git worktree list`, identify only this task's created worktree path(s), then `git worktree remove <path>` when safe. Re-run `git worktree list` and report the cleanup result.
 
 ## PR body template
@@ -96,6 +102,8 @@ NOT like: "经真实 API 验证 / 每个提交都测过 / endpoints verified"（
 - About to show or push a branch containing a username, tracker ID, issue number, Chinese, spaces, or underscores → STOP, rename it to `<group>/<english-kebab-case-description>` and validate it first.
 - About to include an agent-generated plan/spec/design/progress/tracker/evidence/handoff Markdown file in the PR → STOP, remove it from the commit. Only an explicitly requested or repository-required product document may remain.
 - PR was created from a temporary task worktree and you're about to leave it on disk → STOP, clean only that task worktree or explain why cleanup is blocked.
+- About to merge with "Rebase and merge", or about to declare a PR merged without checking that `#N` shows up in `git log origin/<base>` → STOP: rebase rewrites SHAs and leaves no PR number in history; switch to squash/merge commit, or record the mapping explicitly.
+- About to flag "the merged commit is not the commit I reviewed" purely because the SHAs differ after a squash/rebase merge → STOP: compare tree fingerprints (`git rev-parse <commit>^{tree}`), not SHAs.
 
 ## Rationalizations (forbidden)
 | Excuse | Reality |
