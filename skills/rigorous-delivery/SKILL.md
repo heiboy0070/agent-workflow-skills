@@ -41,6 +41,8 @@ Different projects use different DBs/creds. **Read them from the project `.env`;
 - **测试基线（用户规则，2026-08-19 起）**：**不新增依赖 PostgreSQL（或任何真实数据库）的 test 文件**——不写拨 DB 的 `*_test.go`、不引 testcontainers/sqlite 内存库替代品。可自动化的是纯单元/表驱动测试（内存构造数据，零 DB 连接）；功能验证一律走真实 API read-after-write（+ 有头浏览器）。存量 DB 测试只维护，不扩散。
 - **Critical behavior → TDD first.** Write a failing test before implementation when changing a state machine, concurrency/idempotency behavior, auth/authorization, durable mutation or migration, external callback/retry boundary, security-sensitive validation, public contract whose breakage would block clients, or a reproduced defect.
 - **State machine → 不变式测试必写**：除了 case 测试，必须写"属性测试"——遍历某些维度组合断言不变式始终成立。例如支付 webhook + 主动查单交叉验证时，写 `Test_NeverDropPayment` 遍历 payload=S × 全 query 组合，断言 decision 绝不 skip/fail。其他常见不变式：并发 N 次相同请求最终只生效 1 次、累计金额 ≤ 原单、状态机无死状态。
+- **门禁类枚举必须"穷举分类"**：任何按状态/枚举决定"阻断还是放行"的门禁（支付、计费、权限、限流、槽位），必须提供一个遍历**全部取值**、逐值断言分类结果的用例——新增枚举值不分类就测试失败。**禁止用 `<> X` 表达阻断集合**（未知/新增值会默认放行），必须写成显式集合；多个入口用同一语义时共用一个导出常量，禁止两处各写一份。
+- **渠道事实必须能覆盖本地判定**：不变式至少包含"渠道确认成功 → 该流水必然收敛为成功并可继续履约"（遍历所有当前状态断言），以及"已无效的失败通知不会回退成功态"。若某条路径故意拒绝渠道成功，必须证明它有一条真实的收敛出口，否则按 P1 处理（见下方 reviewer checklist）。
 - **Ordinary behavior → batch implementation, then grouped regression.** Routine CRUD/query/mapping endpoints may be implemented together after requirements are clear, then covered by focused table-driven or contract tests after the complete functional pass. Do not force one RED/GREEN cycle per ordinary endpoint.
 - If the user explicitly requests broader TDD, follow that request. Never use the ordinary-path allowance to skip tests entirely or to downgrade a critical path.
 - **refactor → behavior-preserving slices.** Output must be byte-identical contract. Split into independently verifiable slices (by entity / table / feature); each slice is implement → verify → commit.
@@ -61,6 +63,8 @@ Different projects use different DBs/creds. **Read them from the project `.env`;
 - Use the compiler to find all references (delete a field → build errors → fix each). Don't rely on grep alone for completeness.
 - Preserve the outward API contract; don't casually delete DTO fields. If a field must go, do the frontend check (Iron rule 5).
 - 关键链路（支付、账务、状态机、重试、并发）必须补齐最小关键业务日志：入口参数摘要、状态迁移、外部网关请求前后、幂等/锁冲突、回滚或补偿分支。日志要求可检索（trace/request/businessID）、结构化、低噪声，避免在高频热路径加 `fmt.Printf` 式噪音。
+- **拒绝分支必须留痕（含管理端）**：新增或修改的**拒绝分支**（用户可见错误码、管理端业务拒绝）必须输出一条结构化日志（业务 id + 分支名 + 关键状态），交付时给出"修复前 0 行 / 修复后 N 行"的对照证据——没有日志的拒绝分支会让线上问题只能靠反查数据库定位。
+- **错误码必须能分流原因**：同一个"服务暂时不可用"文案不得同时承载「参数不合规」「业务态拒绝」「依赖不可用」三类原因；管理端接口尤其要把参数错误映射成可执行文案（缺什么、怎么补），否则调用方只能反复重试。
 
 ### 4. Verify — staged: smoke → review → full (API ONLY)
 Run these in order. Do NOT jump to "done" after the smoke step.
@@ -76,6 +80,8 @@ Start this staged gate after the accepted functional pass is complete. Add group
 - **Normal pass:** requirements/correctness, API contract, code quality, and data-access/performance sanity: N+1, request amplification, missing indexes/full scans, hot-path work, and duplicate requests. Use Network request count or query logs when the touched path is runnable.
 - **User-visible copy pass (always, even for backend-only diffs):** list every user-facing string the diff adds, changes, or newly reaches — `errorCode`→message mappings, client copy, CLI/notification text, and docs clients copy verbatim. Read the exact final wording a user would see for each branch and flag any internal terminology as a blocking P1: internal state/segment/status names, enum values, table/column names, scheduler/quota mechanics, cycle/window/batch internals, provider/adapter names, migration or legacy-data bookkeeping, retry/lease/idempotency jargon, or numeric implementation parameters (TTL/hours/counts) the user cannot act on. Any promise of "contact support" must map to a support path that actually exists. A code-only test (asserting the error code but not the copy) does not clear this item.
 - **Payment/idempotency reviewer checklist:** if the diff adds or changes idempotency keys, reservation/lock tables, provider retries, or metadata lookups, reviewers must test hostile metadata (`idempotency_key`, `status`, `customer_id`, `recovery_*`, case/space variants), fresh pending, stale pending, succeeded pointer, provider failure release, duplicate concurrent requests, and crash windows before/after provider success. If a Stripe/third-party provider idempotency key format changes, reviewers must check backward compatibility for in-flight pre-deploy retries that reached the provider but not local persistence. A "unique index exists" answer is incomplete.
+- **每个本地终态必须有出口（P1 判定线）：** 逐个支付/退款/履约状态问两句——"渠道已确认成功或用户已付款时，这个状态会不会拒绝履约？"、"它有没有一条**真的能执行**的收敛路径（自动任务 / 管理端接口 / 迟到回调）？"。没有出口、或出口只在 N 天后可用、或需要手工改库的，按 P1 处理；"审计已留痕"不构成出口。
+- **放宽阻断集合必须配反向对照：** 若 diff 让某些状态不再阻断（放行/不再占用资源），必须同时保留一条"仍应阻断"的对照用例（真实接口，证明在途保护没被一起放宽），并显式说明放行后新增的风险由谁兜底。
 - **Adversarial pass ("扮坏人"):** start a fresh checklist after the normal pass and try to BREAK the change with hostile/boundary inputs, auth bypass, concurrent/duplicate operations, empty/null, malformed/oversized payloads, contract violations, injection, and caller metadata poisoning. For read-modify-write/counter/upsert paths, fire N concurrent real requests and verify final state. Compare create/write responses with later read/list representations.
 - **Fix and restart:** Fix every CONFIRMED P0/P1 finding and re-verify it via focused tests/API evidence. Record and explicitly disposition P2/P3; they do not block a P0/P1-clean streak unless the user makes them blocking or they affect safety/security/data integrity. Any chosen fix or other versioned diff change, including a narrow or test-only change, resets the clean-review streak to zero. After focused verification, restart the three qualifying review rounds against the new final diff; do not count a pre-change review as one of the three.
 
@@ -105,7 +111,7 @@ A substantial task is NOT done when the first round of fixes lands. Run autonomo
 - “P0/P1-clean”表示该轮没有新增 P0/P1，且此前没有未关闭或仅因凭证/外部依赖而搁置的 P0/P1。P2/P3 必须记录、定性和向用户披露；除非用户将其设为阻断，否则它们不打断 streak。
 - 任一轮发现 P0/P1，或三轮期间发生任何版本化变更，立即将 streak 重置为 `0/3`。修复、聚焦验证并确定新最终 commit 后，从 Round 1 重新累计；只重跑发现问题的 slice 不能恢复旧 streak。
 - **纯内容变更的重跑降档**：streak 对任何版本化变更照旧归零（证据链绑定 diff identity，不按改动大小豁免——常量也可能是逻辑：价格/URL/开关/角色名）。但若新 diff 是纯内容变更（常量/字符串/文案，无控制流、契约、状态机变更；grep 证明消费方唯一；测试绿），重新累计的三轮**每轮可降为一次聚焦检查**（针对新 diff 的单次 checklist 过检，未变更 hunk 可引用此前轮次的证据），不要求完整 per-round matrix。
-- 每轮在 evidence ledger 记录 round 编号、commit SHA/diff identity、检查角度、命令/运行证据、findings 和 disposition。没有三条同一 identity 的 clean 记录，不得准备 PR handoff、声称 PR-ready 或结束任务。
+- 每轮在 evidence ledger 记录 round 编号、commit SHA/diff identity、检查角度、命令/运行证据、findings 和 disposition。**同时记录 tree 指纹（`git rev-parse <commit>^{tree}`）**：Squash / Rebase 合并会重写 SHA，合并后必须用 tree 指纹证明"合并的内容 = 评审的内容"，只比 SHA 会把正常合并误判成未评审版本。没有三条同一 identity 的 clean 记录，不得准备 PR handoff、声称 PR-ready 或结束任务。
 - 达到 `3/3` 后，在结束任务的同一回复中输出每个仓库的 `base`、`head`、PR title 和完整 body；不能用“需要我准备 PR 吗？”代替实际 handoff。未经用户明确授权，只准备文本，不创建 PR。
 
 ### 5. Check off acceptance (with evidence)
