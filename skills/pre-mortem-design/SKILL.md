@@ -85,6 +85,8 @@ description: "Use when designing or planning a fix/feature in high-risk domains 
 - **身份与代际**：connectionId/sessionId/messageId/leaseId 分别代表什么；恢复是复用业务会话还是创建新连接代际。不能为了合并结果而破坏唯一标识语义。
 - **系统级容量式**：至少计算 `每用户连接上限 × 活跃用户`、`实例数 × 每实例 Pool connectionLimit`、`Resource 数 × 每 Resource 探针/租约上限`，并写清饱和后的行为。
 - **配置真的生效**：不能只看 `idleTimeout`/TTL/limit 的名字。核对依赖版本、默认值、启用条件和源码；例如某些 Pool 只有 `maxIdle < connectionLimit` 才启动 idle 回收。
+- **同一语义的上界只能有一个来源**：若配置层与运行层各有一份上界或校验，先问清超界后果是【被夹取到上界】还是【抛错导致起不来】—— 后者若发生在模块顶层构造，等于整个进程/函数冷启动全挂；再核对两侧的引入日期，**日期不一致 = 存在"只改了一半"的窗口**：那里"配置面支持、运行层拒绝"的修复从未生效过。改动既有上界前先回溯它为什么是这个值；若有人刻意为之，取消该意图必须由用户拍板。
+- **任何 clamp / 回落都要留痕**（原值与生效值）：静默截断会把"我改过了"变成假事实，让人以为能力已经打开。
 - **完整生命周期**：对 WS、Recognizer、PushStream、租约、timer、PoolConnection 和 worker 分别写 create→renew→drain→release→force-expire，尤其覆盖 SDK stop/close 回调永不返回。
 - **释放优先级**：稀缺云资源/租约先释放，埋点、MySQL 最终写入、告警和统计不得阻塞；安全看门狗也不能等这些依赖成功后才启动。
 - **活跃定义**：区分“持续真实数据”“持续静音/空帧”“完全没有包”“仅心跳”。淘汰策略必须基于代码可观测的信号，不能把“用户没说话”直接等同于“连接失活”。

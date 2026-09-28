@@ -20,7 +20,7 @@ A discipline for completing substantial tasks with **high accuracy and real proo
 9. **Completed scope + pushed requires a three-round clean review record.** Run the matching PR review gate against the latest commit before saying the accepted scope is done or preparing a PR handoff. The record must identify the exact commit/diff and contain three consecutive qualifying rounds with no new or open P0/P1. Any code, test, configuration, migration, lockfile, generated artifact, or other versioned diff change invalidates the whole streak and resets it to zero (content-only constant/string changes included — but see the scaled re-accumulation allowance in section 4d). Scope review to the diff and genuinely coupled flows, not the whole repository.
 10. **Bind existing issues; never manufacture one for the workflow.** If the user provides an issue or a clear matching tracker issue already exists, bind the current branch to that issue. If no issue exists, continue with the accepted user request as scope and do not create a tracker issue unless the user explicitly asks. For issue-driven work, keep one issue or explicitly accepted sub-item set per branch/PR. If work reveals a second issue, dependency, or adjacent risk, document it as follow-up and stop before implementing it in the same branch unless the user explicitly approves combining scopes.
 11. **Finish the functional pass before polishing.** After scope and high-risk design are clear, implement the accepted functional surface as one concentrated pass. Do not interrupt every ordinary endpoint to rewrite Markdown, polish prose, or run a full review cycle. Consolidate ordinary regression tests, review, evidence, and the final chat handoff after the functional pass is complete. Critical paths still follow the test policy in step 0.
-12. **A branch-based task ends with a complete PR-ready handoff.** After `3/3`, automatically provide each repository's `base`, `head`, PR title, and full PR body even when the user asked only for implementation, validation, or review. Preparing text is mandatory; creating/opening the PR remains a separate action requiring explicit user authorization and the `creating-pull-requests` workflow.
+12. **A branch-based task always ends with the PR handoff *prepared*; how it is surfaced follows the user's intent (single source of truth with `rigorous-feature-delivery`).** After `3/3`, every repository's `base`, `head`, PR title, and full body MUST exist and be reproducible. When the user asked to create/open a PR, or asked for a review/merge handoff, produce that payload in full — and that instruction is the authorization to create it. When the user asked only for implementation or validation, report the readiness identity (branch, commit SHA, tree fingerprint, `3/3` status, disclosed P2/P3) plus a one-line pointer that the payload is ready on request: do not inline the full payload, and never end by asking whether to *prepare* material. Both extremes are forbidden — ending with "需要我准备 PR 吗？" instead of having the material ready, and dumping a full payload the user did not ask for.
 
 ## DB & credentials — per project, from env
 
@@ -51,6 +51,9 @@ Different projects use different DBs/creds. **Read them from the project `.env`;
 - Recon the change surface: grep references, read key code, inspect DB schema. Know the full blast radius before editing.
 - Check for a user-provided or clearly matching existing tracker issue. Bind it when present. If none exists, name the accepted request or sub-item set this branch is allowed to complete and proceed without creating an issue. Keep adjacent issues out of the implementation plan unless the user explicitly approved a combined branch.
 - Decompose into implementation, verification, and finalization phases in the working context. Do not use repository Markdown as the default planning or tracking mechanism.
+- **用户/评审给出的历史与现场断言是"待验证线索"**（"这个以前修过"、"这个值是特意设的"）：先回查代码与 git 历史确认，再把结论（证实 / 证伪 / 部分成立）写进台账，然后才进设计。这类记忆通常指向一处真实机制，即使它的结论与推断相反。
+- **冻结方案（用户规则）**：方案若是经多轮探索或用户纠偏才收敛的，或用例要跨上下文压缩 / 跨会话 / 多次提交，实现前先写一份**冻结方案文档**，固定：最终目标与可观察结果、不变式、已确认决策**及被它否定的替代方案**、易被后续会话弄错的关键细节与边界（精确表/列/键名、解析与优先级规则、默认值）、数据与接口/UI 契约、范围外、验证计划，以及**逐条可验证的验收标准**（命令 / 接口调用 / DB 状态 / UI 动作）。同时记录已纠正的错误认知及其错因。冻结后逐条对齐实现；改动必须追加变更记录，禁止静默改写已冻结条款；压缩或换会话后先重读并对照实时代码与数据复核前提。文档保持 untracked（`docs/**` 不进 git），且**不替代**测试与验收证据。触发条件与文档形态详见 `rigorous-feature-delivery` 工作流第 2 步。
+- **设计先行 + 闭环定义（用户规则）**：顺序固定为「先设计 → 设计冻结 → 再实现」；设计阶段必须给出**闭环定义**——用真实端点/函数/表名写清「用户意图 → 鉴权 → 取数 → 出口 → 终止」全程，并逐段写明**凭什么观测它真的发生了**（状态码 / DB 行 / 指标 / 响应字段），以及每段静默失败时会伪装成什么。写不出观测点或反例断言的段，属于设计缺陷，禁止进入实现。细则与四个真实断点案例见 `rigorous-feature-delivery` 的「设计先行与闭环设计」。
 - Preserve commands and raw evidence in tool output or a temporary ledger outside the repository. Agent workflow Markdown MUST NOT be staged or committed unless the user requested that exact document or the repository explicitly requires it as a versioned product artifact.
 - For scope or high-risk forks, use AskUserQuestion — don't decide unilaterally.
 
@@ -82,6 +85,7 @@ Start this staged gate after the accepted functional pass is complete. Add group
 - **Payment/idempotency reviewer checklist:** if the diff adds or changes idempotency keys, reservation/lock tables, provider retries, or metadata lookups, reviewers must test hostile metadata (`idempotency_key`, `status`, `customer_id`, `recovery_*`, case/space variants), fresh pending, stale pending, succeeded pointer, provider failure release, duplicate concurrent requests, and crash windows before/after provider success. If a Stripe/third-party provider idempotency key format changes, reviewers must check backward compatibility for in-flight pre-deploy retries that reached the provider but not local persistence. A "unique index exists" answer is incomplete.
 - **每个本地终态必须有出口（P1 判定线）：** 逐个支付/退款/履约状态问两句——"渠道已确认成功或用户已付款时，这个状态会不会拒绝履约？"、"它有没有一条**真的能执行**的收敛路径（自动任务 / 管理端接口 / 迟到回调）？"。没有出口、或出口只在 N 天后可用、或需要手工改库的，按 P1 处理；"审计已留痕"不构成出口。
 - **放宽阻断集合必须配反向对照：** 若 diff 让某些状态不再阻断（放行/不再占用资源），必须同时保留一条"仍应阻断"的对照用例（真实接口，证明在途保护没被一起放宽），并显式说明放行后新增的风险由谁兜底。
+- **会红的断言才算证据（变异检验）：** 本轮 diff 新增的每条安全网/断言，都要有一条"故意破坏它所守护的行为 → 它必须变红"的记录；不能变红的测试是装饰。涉及阈值/区间/上界的用例必须覆盖**边界值**与**边界值 + 1** 两侧（闭区间还是开区间写错，只有这一对能抓到）。
 - **Adversarial pass ("扮坏人"):** start a fresh checklist after the normal pass and try to BREAK the change with hostile/boundary inputs, auth bypass, concurrent/duplicate operations, empty/null, malformed/oversized payloads, contract violations, injection, and caller metadata poisoning. For read-modify-write/counter/upsert paths, fire N concurrent real requests and verify final state. Compare create/write responses with later read/list representations.
 - **Fix and restart:** Fix every CONFIRMED P0/P1 finding and re-verify it via focused tests/API evidence. Record and explicitly disposition P2/P3; they do not block a P0/P1-clean streak unless the user makes them blocking or they affect safety/security/data integrity. Any chosen fix or other versioned diff change, including a narrow or test-only change, resets the clean-review streak to zero. After focused verification, restart the three qualifying review rounds against the new final diff; do not count a pre-change review as one of the three.
 
@@ -107,12 +111,12 @@ A substantial task is NOT done when the first round of fixes lands. Run autonomo
 
 **多轮 review 退出条件（所有风险级别强制）**：
 - 在同一最终 diff/commit 上连续完成 **3 轮 P0/P1-clean review**；“测试通过”“一轮 combined review”“改动很小”“已被另一位 reviewer 看过”或临近交付时间都不能减少轮数。
-- 三轮必须使用独立的新检查角度与证据，不能复制上一轮结论：Round 1 聚焦需求、正确性、契约与数据访问；Round 2 聚焦 hostile input、安全、权限、并发与失败路径；Round 3 聚焦集成回归、前后端/UI、部署运行与最终 PR diff。按风险删去明确不适用项，但不得把三轮合并成一次。
+- 三轮必须使用独立的新检查角度与证据，不能复制上一轮结论：Round 1 聚焦需求、正确性、契约与数据访问，**并核对叙述与代码一致**（diff 里每个数值、阈值、选项名、状态名是否与注释/测试名/文档对齐 —— 描述安全语义的注释与代码矛盾，比没有注释更糟，运维会照着它行动）；Round 2 聚焦 hostile input、安全、权限、并发与失败路径；Round 3 聚焦集成回归、前后端/UI、部署运行与最终 PR diff，**并做交付身份对拍**（文件集 = 已评审集合、head = 已评审修订含 tree 指纹、正文逐字一致、状态可合并，不信创建命令的回显）。按风险删去明确不适用项，但不得把三轮合并成一次。
 - “P0/P1-clean”表示该轮没有新增 P0/P1，且此前没有未关闭或仅因凭证/外部依赖而搁置的 P0/P1。P2/P3 必须记录、定性和向用户披露；除非用户将其设为阻断，否则它们不打断 streak。
 - 任一轮发现 P0/P1，或三轮期间发生任何版本化变更，立即将 streak 重置为 `0/3`。修复、聚焦验证并确定新最终 commit 后，从 Round 1 重新累计；只重跑发现问题的 slice 不能恢复旧 streak。
-- **纯内容变更的重跑降档**：streak 对任何版本化变更照旧归零（证据链绑定 diff identity，不按改动大小豁免——常量也可能是逻辑：价格/URL/开关/角色名）。但若新 diff 是纯内容变更（常量/字符串/文案，无控制流、契约、状态机变更；grep 证明消费方唯一；测试绿），重新累计的三轮**每轮可降为一次聚焦检查**（针对新 diff 的单次 checklist 过检，未变更 hunk 可引用此前轮次的证据），不要求完整 per-round matrix。
+- **纯内容变更的重跑降档**：streak 对任何版本化变更照旧归零（证据链绑定 diff identity，不按改动大小豁免——常量也可能是逻辑：价格/URL/开关/角色名）。但若新 diff 是纯内容变更（常量/字符串/文案，无控制流、契约、状态机变更；grep 证明消费方唯一；测试绿），重新累计的三轮**每轮可降为一次聚焦检查**（针对新 diff 的单次 checklist 过检，未变更 hunk 可引用此前轮次的证据），不要求完整 per-round matrix。**惰性 delta 先证明再复用**：身份变更后先机械判定 delta 是否惰性（例：剥掉注释行后逐字节比对生产文件的可执行行；或仅测试文件新增用例），把该证明的命令与输出写进台账；若惰性，则此前针对**未变更代码**的行为证据（真库冒烟、性能测量）继续有效、无需重跑 —— 这让门禁代价与风险成比例，而不削弱门禁。
 - 每轮在 evidence ledger 记录 round 编号、commit SHA/diff identity、检查角度、命令/运行证据、findings 和 disposition。**同时记录 tree 指纹（`git rev-parse <commit>^{tree}`）**：Squash / Rebase 合并会重写 SHA，合并后必须用 tree 指纹证明"合并的内容 = 评审的内容"，只比 SHA 会把正常合并误判成未评审版本。没有三条同一 identity 的 clean 记录，不得准备 PR handoff、声称 PR-ready 或结束任务。
-- 达到 `3/3` 后，在结束任务的同一回复中输出每个仓库的 `base`、`head`、PR title 和完整 body；不能用“需要我准备 PR 吗？”代替实际 handoff。未经用户明确授权，只准备文本，不创建 PR。
+- 达到 `3/3` 后，每个仓库的 `base`、`head`、PR title 与完整 body 必须**已备好且可复现**；**呈现方式按用户意图分级（与 Iron rule 12 同源，禁止两处各说一套）**：用户要求开 PR 或要交付评审 → 同一回复内给出完整 payload（该指令即创建授权，直接创建）；用户只要实现/验证 → 给 readiness 身份 + 一句"payload 已备好、要就说"，不内联完整 payload。两种极端都禁止：用"需要我准备 PR 吗？"代替已备好的材料，或把用户没要的完整 payload 灌进回复。
 
 ### 5. Check off acceptance (with evidence)
 - Report acceptance in the final chat handoff after implementation and staged verification stabilize. Create versioned API, integration, or deployment documentation only when it is an explicitly required product deliverable.
@@ -128,6 +132,7 @@ A substantial task is NOT done when the first round of fixes lands. Run autonomo
 - Confirm before outward-facing/irreversible actions; follow the project's branch conventions.
 - Follow the branch-name contract in `rigorous-feature-delivery`: `<group>/<english-kebab-case-description>`, ASCII English only, no usernames, tracker IDs, issue numbers, Chinese, spaces, or underscores. Validate the proposed name before branch/worktree creation and again before push.
 - Before committing, check that the diff only implements the bound issue, accepted sub-item set, or accepted untracked request. If the diff contains an adjacent scope, split it out or get explicit user approval before commit/push.
+- **仓库自带门禁先跑**：提交/推送前主动运行仓库的 hooks、守卫/lint 脚本与 CI 入口，而不是等被拒绝；被拦截时满足它的要求（规则未文档化就去读守卫源码），**禁止用 `--no-verify` 之类绕过**。
 - After pushing a branch for a completed scope, run the required three-round risk-tiered PR review gate before suggesting or preparing a PR. High-risk changes still need 4b-full within the applicable rounds; low/medium-risk changes must cite three clean combined impact records against the same latest commit.
 
 ## Definition of Done — keep one compact checklist in the completion reply
@@ -142,7 +147,7 @@ A "done" claim missing any line below is invalid:
 - [ ] relevant test counts and frontend contract basis recorded; failures include raw output/reference
 - [ ] user-visible copy pass done: each touched code/branch has its exact final wording recorded, no internal terminology leaked, and any "contact support" promise maps to a real support path
 - [ ] latest commit passed the reusable three-round PR gate; high-risk changes have one deduplicated 4b-full matrix and no open P0/P1
-- [ ] completion reply includes a separate `base`/`head`/PR title/full body handoff for every branch-based repository
+- [ ] PR handoff prepared for every branch-based repository (`base`/`head`/title/full body): shown in full when the user asked for a PR or a review handoff; otherwise the readiness identity plus a one-line ready-on-request pointer (Iron rule 12)
 
 ## Anti-patterns (forbidden)
 - Interrupting every ordinary CRUD/query endpoint for a separate RED/GREEN cycle, progress-document edit, and review pass when no critical-risk trigger applies.
@@ -159,7 +164,7 @@ A "done" claim missing any line below is invalid:
 - Treating the red-team ("扮坏人") pass as optional for high-risk changes because the smoke test passed or the suite is green.
 - Merging normal review and red-team into one superficial pass, or rejecting a finding without evidence.
 - Stopping after one or two clean rounds, reusing a pre-fix review after the diff changed, or relabeling one checklist as three reviews.
-- Ending with a summary or “需要 PR 吗？” instead of the mandatory complete PR-ready handoff.
+- Ending with a summary or “需要 PR 吗？” instead of having the PR-ready handoff already prepared (Iron rule 12: how it is surfaced follows the user's intent).
 - Claiming "no response change, nothing to paste" to skip read-after-write evidence — read-after-write proof is ALWAYS required for any write.
 - Declaring a read path fine without counting the REAL requests — missing an N+1: per-row / per-parent fan-out on the client, or per-item queries on the server. "The code looks efficient" is not evidence; the Network count / query log is.
 - 新增依赖 PostgreSQL/真实数据库的 test 文件（含 testcontainers、内存 DB 替代）来「验证」功能——DB 依赖测试不算功能验证且禁止新增：纯逻辑用无 DB 单测覆盖，功能验证走真实 API。
@@ -180,5 +185,7 @@ A "done" claim missing any line below is invalid:
 - About to ask the user "建 PR 吗? / 可以提 PR 了" for a high-risk change when only the standard reviewer + red-team ran — the multi-dimensional impact-radius review (4b-full, front+back when impacted) is the GATE before suggesting a PR; run it and show the consolidated table first.
 - About to verify a frontend/UI change in a HEADLESS browser — re-run with `agent-browser --headed`. If a change does not appear, restart a potentially stale dev server and re-test.
 - An issue-driven branch contains fixes for a second tracker issue because it was "nearby" or "overlapped" — split it or ask first. Traceability beats opportunistic bundling.
+- About to write implementation code while the design has no **closed-loop definition** (no per-segment observation, no silent-failure list, no counter-example assertions), or about to claim "闭环了" because the happy path returned 200 — go back to the design gate first.
+- About to declare a capability "能用" without one end-to-end assertion that spans the whole path and would FAIL on the previous code — a green happy path proven only on the new code proves nothing about closure.
 
 All of these mean: run the staged verify — **smoke → current-agent risk-tiered review → full** — and report compact, reproducible evidence. Never delegate automatically; Task/Agent/subagent tools require an explicit request from the user in the current task.

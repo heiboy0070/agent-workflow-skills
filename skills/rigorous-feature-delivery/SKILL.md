@@ -22,12 +22,45 @@ Use this skill to execute large feature, refactor, or migration work end to end.
 
 Use this as the default chain for feature/fix work:
 
-1. **Plan/design:** Use `pre-mortem-design` before finalizing plans for payments, state machines, auth, durable data, concurrency, or external integrations.
+1. **Design first (设计先行，强制门):** No product code before a frozen design exists. Use `pre-mortem-design` for payments, state machines, auth, durable data, concurrency, or external integrations. The design MUST contain a **closed-loop definition** (see "设计先行与闭环设计" below) — the end-to-end path plus, for every segment, the observation that proves it actually happened. When the scope was reached by exploration or user pushback, or the work will span context compaction/sessions, freeze the objective, invariants, key details, closed-loop definition, and acceptance criteria in a plan document first (Workflow step 2). A tiny change still needs a design, but three lines in the ledger are enough — what is forbidden is implementing with no design and "closing the loop later".
 2. **Tracker preflight:** First bind an existing tracker issue when the user provides one or a matching issue already exists. If no issue exists, continue with the user's accepted request as the scope boundary. Never create an issue only because this workflow is active; create one only when the user explicitly asks.
 3. **Implement/verify:** Use this skill plus `rigorous-delivery`; follow its test policy, concentrated functional pass, grouped ordinary regression, three-round clean-review gate, and final evidence handoff. Its review/red-team gates remain mandatory before calling the accepted scope complete.
 4. **Ready-to-PR gate:** Freeze each repository's final diff/commit and complete the `rigorous-delivery` gate as three sequential, consecutive review rounds with no new or open P0/P1 against that exact identity. Round N+1 starts only after Round N is recorded; parallel or duplicated reviews do not form a streak. High-risk changes require the current-agent impact-radius matrix (`4b-full`) within the applicable rounds; low/medium-risk changes use three distinct combined-impact rounds. A change after any round resets that repository to `0/3`; if it changes a shared contract or coupled behavior, reset every affected repository's streak.
 5. **PR creation (no handoff pause):** Reaching `3/3` completes the PR-readiness gate. When the user asks to create/submit a PR, that instruction is the authorization — invoke `creating-pull-requests` directly, generate the body from its template, and create the PR; show the link plus full body in chat after (or in the same turn) for review. Do NOT insert a separate "output PR material and wait for confirmation" round-trip. When the user has NOT asked for a PR, do not force PR material into the final report — name the readiness state and let the user decide.
 6. **Cleanup:** After the PR exists, clean up worktree directories created for the task so they do not accumulate.
+
+## 设计先行与闭环设计（强制，用户明确要求）
+
+> 工作流从**设计**开始：设计冻结之后才允许写实现。设计阶段的第一产出不是接口清单，而是**闭环定义**。
+
+**闭环（closed loop）= 一条能力从「用户意图」到「可观测结果」的完整链路，且链路每一段都有可执行的验证手段。**
+「接口返回 200」不是闭环；**客户端真的拿到了、消费了、并且我们能用证据证明它拿到了**才是闭环。
+
+### 设计文档必须写清的四件套
+
+1. **链路图**：用真实端点 / 函数名 / 表名 / 存储对象写出全程：
+   入口 → 鉴权 → 取数 → 变换 → 出口（谁消费）→ 终止（过期 / 撤销 / 清理）。
+2. **每段的观测点**：这一段凭什么证明它真的发生了——HTTP 状态码、数据库行、指标计数器、响应字段、客户端可见状态。
+   写不出观测点的段，就是设计缺陷（无法验收），必须在设计阶段改掉，而不是上线后靠日志猜。
+3. **断点清单**：每一段可能**静默失败**的形态，以及它对外会伪装成什么。至少要覆盖：
+   上游在业务逻辑之前拒绝却回 200 信封 / 数据存在但当前不可读（归档、冻结、软删）/ 地址合法但对象不在我们桶里 /
+   前置校验写死导致正常数据被挡 / 权限或目录策略比真实数据布局更窄 /
+   **配置面静默降级**：取值被夹到上界、回落到默认值、只对部分实例生效，以及"开关是开着但能力并没在运行"（config ≠ execution）。
+   最后这一类都不报错，只会把"我改过了"变成假事实 ⇒ 凡有 clamp/回落都必须留痕（原值与生效值），并在交付里给出核对生效值的方法。
+4. **验收即闭环检查**：一条端到端断言串起全程，并且**每个可能断的段都有反例断言**
+   （伪造凭证 → 拒绝、无凭证 → 拒绝、不可读状态 → 专用状态码、字段缺失 → 明确降级），
+   反例断言必须能在旧代码上失败（变异检验），否则它证明不了任何东西。
+
+### 反例（2026-09-22 金运录音 MCP 连接器实战，四个断点全都表现为"成功"）
+
+| 断点 | 表面的样子 | 真因 / 正解 |
+|---|---|---|
+| 媒体取流拿地址主机做准入 | 接口 200、链路"通" | 自定义域名/CDN/路径式地址全被拒 → **主机不参与映射，只按路径取对象** |
+| 录音目录前缀写死 `uploads/audio/` | 同上 | 测试/历史数据布局不同 → **目录策略可配置，默认不变** |
+| 对象处于冷归档 | 代理 503「服务暂时不可用」 | `403 InvalidObjectState` 是**数据状态不是故障** → 409 + 专用错误码 + 自动解冻 |
+| 授权页发码漏带服务间令牌 | 页面「验证码已发送」 | 上游中间件回 `1008`，**一条短信都没发出** → 带令牌 + 只对白名单码回「已发送」 |
+
+结论：**闭环必须在设计阶段定义，并在验收阶段用证据逐段回填**；否则每一个断点都会伪装成"已经能用"。
 
 ## Issue Scope Binding
 
@@ -56,7 +89,19 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Ask only when the answer cannot be discovered and a wrong assumption would be risky.
    - State assumptions in the working context or temporary evidence ledger.
 
-2. Isolate the work.
+2. Freeze the design before implementing (设计门：设计没冻结，不写实现).
+   - **Step order is not negotiable:** establish scope (step 1) → design + freeze (this step) → implement (step 6). If the user asks for implementation while the design is missing or unconfirmed, say so and produce the design first; do not "write a bit then design".
+   - Write one **frozen plan document** before touching product code when the scope was reached through exploration, user pushback, or several rounds of Q&A, or when the task will outlive one context window, span sessions, or produce many commits. For a slice that is already fully specified, the design may be short — but it must still exist (sequence, closed-loop definition, acceptance checks) and be recorded in the working context/ledger.
+   - The document MUST pin down: the final objective and its observable results; the invariant(s) that must never be violated; every confirmed decision **and the alternative it rejected**; the key details and edge cases a later session would otherwise get wrong (exact table/column/key names, resolution and precedence rules, default values, boundary cases); the data-model and API/UI contract; what is explicitly out of scope; the verification plan; and **acceptance criteria written as individually verifiable checks** (a command, an endpoint call, an observed DB state, or a UI action).
+   - The document MUST also contain the **closed-loop definition** (see "设计先行与闭环设计"): the end-to-end path by real endpoint/function/table names, the observation that proves each segment, the silent-failure list, and the counter-example assertions — including the segment that a previous implementation silently dropped. A design that cannot say how each segment will be observed is not ready to implement.
+   - Record corrected misconceptions explicitly, with the reason the rejected version was wrong. That one line is what stops a later session from re-introducing a design the user already refused.
+   - **改既有取值前先考古它的历史意图（通用门禁）**：改动任何既有常量、阈值、默认值或开关前，对**同一语义的每个消费点**分别回溯引入提交与理由（`git log -S "<旧值>" -- <file>`），连同注释一起读。若有人**刻意**为此设过值并写明理由：① 该理由必须作为"被否决的替代方案"进入本设计；② 若本次改动会取消它，必须交用户拍板，不得自行定性为"清理地雷"。同一语义若在多层各有一份上界，逐层验证都接受目标值 —— **两层引入日期不一致 = 存在"只改了一半"的窗口**：那种"配置面支持、运行层拒绝"的修复从未生效过，且不会有人发现。
+   - Keep the document untracked and out of product history (see step 4). Prefer a repository-local untracked path only when that repository's own convention designates one for plans; otherwise store it outside the repository.
+   - Frozen means frozen: implement against it item by item. Amendments require an appended change-log entry stating what changed and why; never silently rewrite a frozen clause.
+   - On resume after compaction, a fork, or a new session, re-read the frozen document before writing code, and re-verify its premises against live code and data — a frozen plan is never evidence that the code still matches it.
+   - The document is a scope fence, not proof. It never substitutes for tests, red-to-green evidence, or acceptance verification.
+
+3. Isolate the work.
    - Create a branch from the repo's mainline branch.
    - Branch names MUST use `<group>/<english-kebab-case-description>`. Use the repository's documented group when present; otherwise choose a functional group such as `feature`, `feat`, `fix`, `hotfix`, `refactor`, `chore`, `docs`, or `test`.
    - The entire branch name MUST be ASCII English: lowercase letters and digits separated by single hyphens. Do not use Chinese, spaces, underscores, usernames, owner prefixes, or generated issue-title slugs.
@@ -67,13 +112,13 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Record original repo paths, worktree paths, branch names, and dirty baseline status.
    - Do not revert unrelated user changes.
 
-3. Keep workflow artifacts out of product history.
+4. Keep workflow artifacts out of product history.
    - Keep scope, plans, decisions, commands, raw evidence, blockers, commit plans, and handoff notes in the working context, tool log, or a temporary path outside the repository.
    - Agent-generated plan/spec/design/progress/tracker/evidence/handoff Markdown is temporary workflow material. Even if created, it MUST NOT be staged, committed, or included in a PR.
-   - This rule overrides subordinate skills that require saving or committing `docs/superpowers/plans/*.md`, `docs/superpowers/specs/*.md`, or similar workflow documents. Store such content outside the repository or provide it in chat instead.
+   - This rule overrides subordinate skills that require saving or committing `docs/superpowers/plans/*.md`, `docs/superpowers/specs/*.md`, or similar workflow documents. Store such content outside the repository or provide it in chat instead — except when the repository's own convention designates a specific untracked local path for plans (for example a `CLAUDE.md` rule that plan files live under `docs/superpowers/plans/` and are never committed), in which case that path is allowed and the file MUST stay untracked.
    - A Markdown file may enter git only when the user explicitly requests that exact document as a deliverable or the repository explicitly requires it as a versioned product artifact. API/integration documentation requested as part of the product is not a workflow artifact.
 
-4. Treat database changes as reviewable artifacts.
+5. Treat database changes as reviewable artifacts.
    - Never execute production or project SQL unless the user explicitly asks and approves.
    - Add migration or SQL files with clear comments and execution notes.
    - For every new persistent table, complete the `pre-mortem-design` **新表影响矩阵**; a missing field or an unjustified runtime table blocks implementation.
@@ -84,7 +129,7 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Verify both paths before handoff: clean database executes the complete file (CREATE includes new columns, guards no-op); earlier-revision database re-executes the same file without duplicate-column/table failures (guards skip). Compare every table/column/index referenced by the code against the migration artifact, and keep the guarded ALTER's AFTER anchor and definition byte-consistent with the CREATE TABLE column.
    - Document which tests remain blocked until SQL is manually reviewed and executed.
 
-5. Implement in reviewable slices.
+6. Implement in reviewable slices.
    - Treat slices as logical scope and commit boundaries, not mandatory stop points after every ordinary endpoint.
    - Complete related ordinary CRUD/query/mapping interfaces in one concentrated functional pass, then add grouped regression/contract coverage.
    - Use test-first implementation only for the critical behaviors classified by `rigorous-delivery`, including state machines, concurrency/idempotency, auth, durable mutation, external callbacks/retries, security-sensitive validation, client-blocking contracts, and reproduced defects.
@@ -108,7 +153,7 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
 - Enforce this on every touched copy path: read the exact final string a user would see for each code/branch (including the ones you only reworded), record it in the stable-code-to-copy table, and add or update an assertion on the exact expected copy — a test that only checks the error code does not satisfy this rule.
 - **指引必须可执行（不许让用户做做不到的事）。** 文案里给出的每一个动作，都要先验证它在**当前状态下真的能执行**；做不到就是阻塞级缺陷。反例：`已有其他会员订单支付中，请先完成或关闭原支付` —— 在途时订单根本不可取消，取消也不会释放占用（占用由渠道状态决定），用户照做只会失败。可用动作只有"等待后重试"或"联系客服"，且承诺的客服/自助路径必须真实存在。管理端（运营/客服）文案同样受此约束：参数不合规要给"缺什么、怎么补"，不能报成"服务暂时不可用"。同时把该文案的**精确断言**写进用例（只断言 errorCode 不算过关）。
 
-6. Verify with real commands.
+7. Verify with real commands.
    - Start the staged smoke/review/full gate after the accepted functional pass is complete; do not interrupt every ordinary endpoint with a full verification cycle.
    - **后端/worker/CLI 改动必须本地起真实程序 + 本地数据库调真实接口**（`creating-pull-requests` 铁律 12）：建一次性库、跑迁移、灌最小数据行、启动二进制、调用真实接口、检查库里的真实数据行。单元测试与绿色套件**不是**验收。修复类要给出 base 版本的**修复前后对照**，并配**判别性对照**（已注册路由 200 vs 未注册路径 404）——鉴权中间件常在路由之前执行，未鉴权时同类路径可能返回完全相同的响应，不能作为"路由是否存在"的证据。触达不到的层面要在交付里明说。
    - **动手前先证明目标代码路径可达**（铁律 13）：确认存在非测试调用方，并确认**当前部署的 SHA** 实际调用的是哪个函数。修不可达代码是无用功。
@@ -124,12 +169,12 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - If runtime, database, or table prerequisites are missing, record exact unblock steps and acceptance criteria in chat or a temporary file outside the repository.
    - Stop any local dev server, mock API, browser session, or background process started for the test when the test finishes, fails, or is interrupted.
 
-7. Deliver the handoff without repository clutter.
+8. Deliver the handoff without repository clutter.
    - Provide the final handoff in chat after implementation and verification stabilize, using the accumulated evidence.
    - Create an API/integration or deployment document in the repository only when the user requested that document or the repository requires it as a product artifact.
    - For deployment-risk work, include rollout order, smoke tests, rollback switch, and what is not guaranteed in the final handoff even when no file is created.
 
-8. Review and red-team before completion.
+9. Review and red-team before completion.
    - Invoke `rigorous-delivery` for this gate and follow its current-agent review checklists.
    - State the risk tier. It controls each round's depth, not the exit count: every tier and every repository requires three sequential P0/P1-clean rounds against its same final identity. High-risk rounds include separate normal/adversarial work; low/medium-risk rounds may use distinct combined-impact checklists.
    - Code is not "done" until the exact final diff/commit has a `3/3` record and every P0/P1 is fixed/re-verified with evidence. Record and surface P2/P3; they do not block unless the user makes them blocking or they affect safety/security/data integrity.
@@ -140,7 +185,7 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Fix findings or document residual risks with evidence.
    - Record each round's number, commit SHA/diff identity, independent angle, selected radius, findings, dispositions, and evidence in the shared ledger. Any versioned change resets the record to `0/3`; PR preparation may reuse only a complete `3/3` record for the unchanged final identity.
 
-9. Commit by functional slice.
+10. Commit by functional slice.
    - For substantial work, create commits by module/functional slice. Target 2-5 commits whether the scope comes from a bound issue or an accepted untracked request.
    - Use these commit grouping rules, in order:
      1. DB/schema/migration compatibility changes: one `feat:` or `fix:` commit.
@@ -160,26 +205,27 @@ When an existing issue is bound, default to **one issue per worktree / branch / 
    - Use Chinese commit subject/body and include `feat` or `fix` when required by the repo or user.
    - Mention verification or deployment-safety details in commit bodies when useful.
 
-10. Push and PR readiness.
+11. Push and PR readiness.
    - Before pushing, rerun `scripts/validate-branch-name.sh "$(git branch --show-current)"`. A rejected branch MUST be renamed and rechecked before any push or PR creation.
    - Run `scripts/validate-workflow-artifacts.sh <base> [head]`. Remove every rejected workflow Markdown file from the commit/PR unless the user or repository explicitly required that exact versioned document; record that exception in the post-create body shown in chat.
    - Push only the frozen commit that passed focused/full tests and the three-round clean-review gate. After push, confirm the remote head SHA exactly matches the reviewed SHA; a push containing a different commit resets the gate.
+   - **diff 与推送的身份纪律（通用）**：① 评审与交付的 diff 一律以 **merge-base** 为基（`git diff $(git merge-base HEAD origin/<target>)..HEAD`），不要用目标分支当前 tip 的双点 diff —— 基线漂移会把别人新合入的改动**以删除形式**算到本分支头上；② 推送前复查 merge-base 是否仍等于建分支时的基线：若漂移，求与本分支文件集的交集，为空时用无工作区合并检查（`git merge-tree --write-tree HEAD origin/<target>`）证明无冲突，**不必为了对齐而 rebase**（rebase 只重写 SHA、使已评审的 tree 指纹失效），但交付正文必须写明"相对基线"；③ 推送使用**显式 refspec**（`git push -u origin <branch>`），不要依赖分支已配置的 upstream —— 本地/worktree 分支的 upstream 可能指向主干。
    - Do not ask "要不要提 PR / 可以提 PR 了吗" before the exact final identity has `3/3`, no open P0/P1, and P2/P3 are explicitly surfaced for triage.
    - Treat the `3/3` ledger as the single PR-readiness record. When `creating-pull-requests` runs later, it verifies this record instead of repeating it, unless any commit or diff changed after review.
 
-11. PR and cleanup.
+12. PR and cleanup.
    - If the user asks to create/open/submit a PR, invoke `creating-pull-requests` directly (base 分支由用户指令指定；模板 body 生成后直接创建，不设事前 handoff 停顿); do not hand-roll creation.
    - When no PR was requested, the final report only states the readiness identity (branch, commit SHA, `3/3` gate status) — it does not inline a full PR payload.
    - After the PR is created, remove worktree directories created for this task using safe git worktree cleanup (`git worktree remove <path>` when possible), and verify `git worktree list` no longer shows stale task worktrees.
    - Never remove the user's original repo or unrelated worktrees.
 
-12. Final report.
+13. Final report.
    - Include the bound issue when one exists; otherwise name the accepted request/sub-item scope. Also include branches/worktrees, commit hashes, key files, explicitly requested product docs, verification commands and results, blocked tests, deployment safety answer, and remaining manual steps.
    - Include the actual commit count and list each commit hash with its module/function scope. If the branch has 1 commit or more than 5 commits, state the explicit user approval that allowed it.
    - For frontend/UI scope, include the affected-UI verification matrix with one row per route/state and responsive variant, plus a visible preview or clickable local link for every required screenshot. Explicitly list any row that could not be exercised; do not collapse multiple unverified pages into a generic “browser test passed” statement.
    - For touched feedback/error paths, include the stable-code-to-copy/UI mapping, unknown-code fallback, automated non-disclosure test result, and screenshot evidence for each visual error state. Explicitly state whether any backend feedback/diagnostic text can still reach a user-facing surface; if that cannot be proven false, do not report the scope complete.
    - Include a three-row review ledger summary per repository: round, exact commit/diff identity, independent angle, P0 count, P1 count, and evidence reference. Anything below `3/3`, any mixed commit identities, or any open P0/P1 means the task remains in progress.
-   - When the user has NOT asked for a PR, end with the readiness state only (branch, commit SHA, `3/3` gate status, disclosed P2/P3) — do not inline the full PR payload; wait for the user to request creation.
+   - When the user has NOT asked for a PR, end with the readiness state only (branch, commit SHA, tree fingerprint, `3/3` gate status, disclosed P2/P3) plus a one-line pointer that the PR payload is ready on request — do not inline the full payload, and do not ask whether to *prepare* it. The payload itself MUST already exist and be reproducible (single source of truth with `rigorous-delivery` Iron rule 12); wait for the user to request creation.
    - List any adjacent issues found but intentionally not implemented.
    - Do not claim full acceptance when SQL, runtime, or real API checks are still blocked.
 
@@ -194,5 +240,6 @@ Before saying the service can keep running during deployment, verify and documen
 - Rollback can be done per repo or per commit.
 - Manual SQL execution has backup and review requirements.
 - Smoke tests cover both flag-off old behavior and flag-on new behavior.
+- 交付依赖**代码之外的状态**（环境变量、控制台开关、密钥、基础设施选项、权限/配额）时，逐项给出四件：**在哪改**（精确入口：控制台路径 / 配置文件 / CLI）、**如何确认已生效**（读什么日志、或执行什么只读查询得到"生效值"）、**如何撤销**（改回什么、删除什么）、**何时执行**（必须先于还是后于代码部署）。只给"变量名 + 目标值"不算交付。
 
 Use precise language: say "旧路径应继续运行 when these conditions hold" instead of promising absolute uptime.
